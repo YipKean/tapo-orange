@@ -1,2 +1,4 @@
 .env
 AGENTS.md
+captures/
+event-log/
