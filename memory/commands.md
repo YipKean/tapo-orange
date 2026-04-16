@@ -9,6 +9,11 @@
 # - Add --zone-edit to drag the zone with mouse, then press 'p' to print values.
 # - Discord bot is now separate from OpenCV. Run scripts\discord_alert_bot.py in parallel.
 # - Set DISCORD_WEBHOOK_URL and optional DISCORD_USER_ID in .env for the bot.
+# - Watchdog can launch a custom command from .env via WATCHDOG_TAPO_COMMAND.
+# - Quick watchdog test: set idle threshold to 0 and check interval to 10s.
+
+# Watchdog quick test (auto re-open in ~10 seconds after process exits)
+powershell -ExecutionPolicy Bypass -File scripts\watchdog_tapo.ps1 -IdleThresholdSeconds 0 -CheckIntervalSeconds 10
 
 # 1) RTSP production candidate (camera 1 Goblin)
 python scripts/tapo_opencv_test.py --zone-polygon "0.31,0.40;0.46,0.40;0.46,0.62;0.31,0.60" --motion-threshold 1.4 --process-fps 6 --snapshot-cooldown 10 --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda
@@ -65,8 +70,10 @@ python scripts/tapo_opencv_test.py --video captures\sample_footage.mp4 --zone 0.
 # - "Cat entered zone (identity=white_black_dotted ...)" for goblin footage
 0.4113,0.5238;0.4845,0.5324;0.4821,0.6393;0.4078,0.625
 0.4220,0.5269;0.4845,0.5324;0.4838,0.6313;0.4227,0.6226
+0.3953,0.5670;0.4533,0.5683;0.4509,0.6782;0.3953,0.6695
+0.3852,0.5627;0.4595,0.5683;0.4588,0.6782;0.3828,0.6726
 
-python scripts/tapo_opencv_test.py --zone-polygon "0.4113,0.5238;0.4845,0.5324;0.4821,0.6393;0.4078,0.625" --zone-edit --save-clip-on-alert --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 10 --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda
+python scripts/tapo_opencv_test.py --zone-polygon "0.3953,0.5670;0.4533,0.5683;0.4509,0.6782;0.3953,0.6695" --zone-edit --save-clip-on-alert --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 10 --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda
 
 python scripts/tapo_opencv_test.py --video captures\1_orange.mp4 --zone-polygon "0.31,0.40;0.46,0.40;0.46,0.65;0.31,0.63" --zone-edit --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda
 

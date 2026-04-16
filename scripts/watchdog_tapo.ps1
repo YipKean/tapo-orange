@@ -9,9 +9,50 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptDir
 $StateDir = Join-Path $RepoRoot "captures"
 $LogFile = Join-Path $StateDir "tapo_watchdog.log"
+$CommandLogFile = Join-Path $StateDir "tapo_watchdog_child.log"
 $IdleScript = Join-Path $ScriptDir "windows_idle_seconds.ps1"
+$DotenvPath = Join-Path $RepoRoot ".env"
 
 New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
+
+function Get-DotenvValue {
+    param(
+        [string]$Path,
+        [string]$Key
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $null
+    }
+
+    foreach ($rawLine in Get-Content -LiteralPath $Path) {
+        $line = $rawLine.Trim()
+        if (-not $line -or $line.StartsWith("#")) {
+            continue
+        }
+        if (-not $line.Contains("=")) {
+            continue
+        }
+        $parts = $line.Split("=", 2)
+        $k = $parts[0].Trim()
+        if ($k -ne $Key) {
+            continue
+        }
+        $value = $parts[1].Trim()
+        if (
+            $value.Length -ge 2 -and
+            (
+                ($value.StartsWith('"') -and $value.EndsWith('"')) -or
+                ($value.StartsWith("'") -and $value.EndsWith("'"))
+            )
+        ) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+        return $value
+    }
+
+    return $null
+}
 
 function Write-Log {
     param([string]$Message)
@@ -48,6 +89,23 @@ function Test-TapoRunning {
 }
 
 function Start-Tapo {
+    $envCommand = Get-DotenvValue -Path $DotenvPath -Key "WATCHDOG_TAPO_COMMAND"
+    if ($envCommand) {
+        $cmdArgs = "/c ""$envCommand >> `"$CommandLogFile`" 2>&1"""
+        Push-Location $RepoRoot
+        try {
+            Start-Process `
+                -FilePath "cmd.exe" `
+                -ArgumentList $cmdArgs `
+                -WorkingDirectory $RepoRoot `
+                -WindowStyle Hidden | Out-Null
+        } finally {
+            Pop-Location
+        }
+        Write-Log "started command from .env: WATCHDOG_TAPO_COMMAND (child log: $CommandLogFile)"
+        return
+    }
+
     $args = @(
         "scripts/tapo_opencv_test.py",
         "--zone-polygon", "0.4113,0.5238;0.4845,0.5324;0.4821,0.6393;0.4078,0.625",
