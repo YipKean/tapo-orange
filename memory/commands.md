@@ -99,6 +99,32 @@ python scripts/tapo_opencv_test.py --video captures\clips\ALERT_2026-04-15_22110
 # 14) Bad-light anti-flicker tuning example
 python scripts/tapo_opencv_test.py --video captures\clips\ALERT_2026-04-17_033355_GOBLIN.mp4 --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda --headless --identity-debug-csv tmp\replay_tune.csv --id-goblin-support-conf 0.78 --id-goblin-support-margin 0.24 --id-goblin-torso-white-min 0.13 --id-goblin-periphery-margin-max 0.01 --id-lock-margin 0.13 --id-switch-margin 0.28
 
+# 15) Build an offline Orange vs Goblin crop dataset from captures\
+python scripts\identity_dataset_builder.py --input-dir captures --output-dir datasets\identity --cat-model models\yolov8m.pt --device cuda --sample-every 3 --cat-confidence 0.08 --cat-imgsz 1920 --emit-label-template datasets\identity\labels_template.csv
+
+# 16) Train the binary identity classifier from extracted crops
+python scripts\train_identity_classifier.py --dataset-dir datasets\identity --output-dir artifacts\identity_classifier --device cuda --epochs 12 --batch-size 32
+
+# 17) Plot the identity-classifier metrics into a readable PNG
+python scripts\plot_identity_metrics.py --metrics C:\Users\PC\Desktop\Projects\tapo-orange\artifacts\identity_classifier\metrics.json --output C:\Users\PC\Desktop\Projects\tapo-orange\artifacts\identity_classifier\metrics.png
+
+# 18) Replay the trained classifier on a trusted Goblin clip and dump per-detection probabilities
+python scripts\replay_identity_classifier.py --video captures\clips\ALERT_2026-04-15_221108_GOBLIN.mp4 --checkpoint artifacts\identity_classifier\best.pt --cat-model models\yolov8m.pt --device cuda --sample-every 3 --output-csv tmp\goblin_replay.csv
+
+# 19) Replay the trained classifier on an Orange false-alert compilation
+python scripts\replay_identity_classifier.py --video captures\clips\2026-04-17-orange-miss-compilation.mp4 --checkpoint artifacts\identity_classifier\best.pt --cat-model models\yolov8m.pt --device cuda --sample-every 3 --output-csv tmp\orange_replay.csv
+
+# 20) Replay the trained classifier on a two-cat clip and dump per-detection probabilities
+python scripts\replay_identity_classifier.py --video captures\clips\ALERT_GOBLIN_2026-04-14_011708.mp4 --checkpoint artifacts\identity_classifier\best.pt --cat-model models\yolov8m.pt --device cuda --sample-every 3 --output-csv tmp\two_cats_replay.csv
+
+# 21) Run the full bowl pipeline with the classifier wrapper on a Goblin-eating clip
+.\.venv\Scripts\python.exe scripts\tapo_opencv_classifier_test.py --video captures\1.2_Goblin_eat.mp4 --motion-threshold 1.4 --process-fps 24 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda
+
+# 22) Run the full bowl pipeline with the classifier wrapper on a trusted Goblin alert clip
+.\.venv\Scripts\python.exe scripts\tapo_opencv_classifier_test.py --video captures\clips\ALERT_GOBLIN_2026-04-15_011511.mp4 --motion-threshold 1.4 --process-fps 24 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda
+
+python scripts/tapo_opencv_test.py --video captures\clips\2026-04-17-orange-miss-compilation.mp4 --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda --identity-debug-csv tmp\replay_tune.csv --id-goblin-support-conf 0.78 --id-goblin-support-margin 0.24 --id-goblin-torso-white-min 0.13 --id-goblin-periphery-margin-max 0.01 --id-lock-margin 0.13 --id-switch-margin 0.28
+
 1_orange coordinate
 --zone-polygon "0.31,0.40;0.46,0.40;0.46,0.65;0.31,0.63"
 

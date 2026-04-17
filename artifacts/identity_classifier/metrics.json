@@ -1,0 +1,146 @@
+{
+  "device": "cuda",
+  "dataset_dir": "C:\\Users\\PC\\Desktop\\Projects\\tapo-orange\\datasets\\identity",
+  "train_samples": 1418,
+  "val_samples": 573,
+  "class_names": [
+    "orange",
+    "goblin"
+  ],
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.2209583164907976,
+      "train_accuracy": 0.9111424541607899,
+      "val_loss": 0.6949718316812166,
+      "val_accuracy": 0.493891797556719,
+      "val_orange_precision": 0.0,
+      "val_orange_recall": 0.0,
+      "val_goblin_precision": 0.493891797556719,
+      "val_goblin_recall": 1.0
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.11478806275983403,
+      "train_accuracy": 0.9647390691114246,
+      "val_loss": 0.6931701283804409,
+      "val_accuracy": 0.493891797556719,
+      "val_orange_precision": 0.0,
+      "val_orange_recall": 0.0,
+      "val_goblin_precision": 0.493891797556719,
+      "val_goblin_recall": 1.0
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.049894176964741334,
+      "train_accuracy": 0.9858956276445698,
+      "val_loss": 0.6930868847207873,
+      "val_accuracy": 0.506108202443281,
+      "val_orange_precision": 0.506108202443281,
+      "val_orange_recall": 1.0,
+      "val_goblin_precision": 0.0,
+      "val_goblin_recall": 0.0
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.06033924158941035,
+      "train_accuracy": 0.9788434414668548,
+      "val_loss": 0.6979724453797931,
+      "val_accuracy": 0.493891797556719,
+      "val_orange_precision": 0.0,
+      "val_orange_recall": 0.0,
+      "val_goblin_precision": 0.493891797556719,
+      "val_goblin_recall": 1.0
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.07381540754375183,
+      "train_accuracy": 0.9739069111424542,
+      "val_loss": 0.6933639452095431,
+      "val_accuracy": 0.493891797556719,
+      "val_orange_precision": 0.0,
+      "val_orange_recall": 0.0,
+      "val_goblin_precision": 0.493891797556719,
+      "val_goblin_recall": 1.0
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.02976432191772841,
+      "train_accuracy": 0.9894217207334274,
+      "val_loss": 0.6954497278880907,
+      "val_accuracy": 0.493891797556719,
+      "val_orange_precision": 0.0,
+      "val_orange_recall": 0.0,
+      "val_goblin_precision": 0.493891797556719,
+      "val_goblin_recall": 1.0
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.04185717184706072,
+      "train_accuracy": 0.9858956276445698,
+      "val_loss": 0.6780436184601842,
+      "val_accuracy": 0.5113438045375218,
+      "val_orange_precision": 0.5087719298245614,
+      "val_orange_recall": 1.0,
+      "val_goblin_precision": 1.0,
+      "val_goblin_recall": 0.01060070671378092
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.02307707275421101,
+      "train_accuracy": 0.9936530324400564,
+      "val_loss": 0.8513984983920219,
+      "val_accuracy": 0.506108202443281,
+      "val_orange_precision": 0.506108202443281,
+      "val_orange_recall": 1.0,
+      "val_goblin_precision": 0.0,
+      "val_goblin_recall": 0.0
+    },
+    {
+      "epoch": 9,
+      "train_loss": 0.036652380426523336,
+      "train_accuracy": 0.9894217207334274,
+      "val_loss": 2.1895878026733278,
+      "val_accuracy": 0.506108202443281,
+      "val_orange_precision": 0.506108202443281,
+      "val_orange_recall": 1.0,
+      "val_goblin_precision": 0.0,
+      "val_goblin_recall": 0.0
+    },
+    {
+      "epoch": 10,
+      "train_loss": 0.015545874498986914,
+      "train_accuracy": 0.995768688293371,
+      "val_loss": 2.0673105163413568,
+      "val_accuracy": 0.5078534031413613,
+      "val_orange_precision": 0.506993006993007,
+      "val_orange_recall": 1.0,
+      "val_goblin_precision": 1.0,
+      "val_goblin_recall": 0.0035335689045936395
+    },
+    {
+      "epoch": 11,
+      "train_loss": 0.011439036409320438,
+      "train_accuracy": 0.9964739069111425,
+      "val_loss": 1.3224864378701537,
+      "val_accuracy": 0.6055846422338569,
+      "val_orange_precision": 0.5622568093385214,
+      "val_orange_recall": 0.996551724137931,
+      "val_goblin_precision": 0.9830508474576272,
+      "val_goblin_recall": 0.2049469964664311
+    },
+    {
+      "epoch": 12,
+      "train_loss": 0.013499541270912116,
+      "train_accuracy": 0.9964739069111425,
+      "val_loss": 1.1209206095544724,
+      "val_accuracy": 0.7539267015706806,
+      "val_orange_precision": 0.6736596736596736,
+      "val_orange_recall": 0.996551724137931,
+      "val_goblin_precision": 0.9930555555555556,
+      "val_goblin_recall": 0.5053003533568905
+    }
+  ],
+  "best_val_accuracy": 0.7539267015706806,
+  "best_checkpoint": "C:\\Users\\PC\\Desktop\\Projects\\tapo-orange\\artifacts\\identity_classifier\\best.pt"
+}

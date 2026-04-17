@@ -448,4 +448,39 @@ Focus on:
   * extracted config/setup, lifecycle logging, alert/clip helpers, and preview rendering helpers
   * kept `tapo_opencv_test.py` as the main entrypoint while making the identity stage easier to replace with a binary classifier
 
+### 2026-04-18
+
+* Built the first offline binary classifier toolchain:
+  * `scripts/identity_dataset_builder.py` extracts YOLO-based torso crops from `captures/`
+  * `scripts/train_identity_classifier.py` trains a MobileNetV3 binary classifier and writes `artifacts/identity_classifier/best.pt`
+  * `scripts/replay_identity_classifier.py` replays the trained classifier on clips and can now show an OpenCV preview while still writing CSV output
+  * `scripts/plot_identity_metrics.py` renders `metrics.json` into `artifacts/identity_classifier/metrics.png`
+* Cleaned dataset outcome used for the first training run:
+  * train samples: 1418
+  * val samples: 573
+  * class balance after cleanup remained Orange-heavy but still workable
+* First classifier run result:
+  * best checkpoint: `artifacts/identity_classifier/best.pt`
+  * best validation accuracy: about 0.754
+  * Goblin precision was very high (about 0.993) but Goblin recall was only about 0.505
+  * main interpretation: the model is conservative about calling Goblin and still misses too many true Goblin frames
+* Added a separate integration wrapper `scripts/tapo_opencv_classifier_test.py`:
+  * imports `tapo_opencv_test.py` instead of copying it
+  * keeps the original `tapo_opencv_test.py` untouched as the baseline / fallback
+  * swaps the heuristic identity classifier with the learned checkpoint while preserving the existing detection, dwell, preview, and event-log flow
+* Current classifier-in-pipeline behavior:
+  * label mapping is `orange -> orange`, `goblin -> white_black_dotted`, uncertain -> `unknown`
+  * replay tests confirmed the wrapper runs end-to-end on CUDA with the trained checkpoint
+  * replay tests also showed identity flicker on Goblin bowl-eating scenes, including brief Orange/Goblin disagreement inside the same session
+* Current diagnosis:
+  * the classifier likely needs more Goblin bowl-eating samples, especially crouched feeder-angle torso views
+  * similar Goblin-eating shots from other bowls / angles may still help if posture, lighting, and visible torso pattern are close enough
+  * replay on known clips is useful for pipeline validation but is not enough proof of generalization if the model has already seen similar source clips during training
+  * the cleaned / expanded classifier dataset is expected to be uploaded to Google Drive later for backup and easier sharing across machines
+* Current rollout decision:
+  * do not let the classifier become the sole live blocker yet
+  * keep the current heuristic / bowl-access pipeline as the main protection path
+  * treat the classifier as supplemental evidence only until Goblin-eating recall improves and unseen-clip replay looks reliable
+  * bias live decision-making toward safety near the bowl: false positives are acceptable, missed Goblin-eating events are not
+
 ---
