@@ -132,6 +132,10 @@ while True:
 * Append threshold-reaching events to `event-log/YYYY-MM-DD.log`
 * Include related snapshot filename in the event log when available
 * Optional: save alert clip on dwell trigger via `--save-clip-on-alert --clip-seconds`
+* Identity pipeline now supports two Goblin evidence tiers:
+  * confirmed Goblin keeps the normal `ALERT: white-black cat in zone ...` path
+  * uncertain Goblin uses `POSSIBLE_GOBLIN: cat in zone ...` without escalating to the full Goblin alert path
+* Offline replay tooling now supports `--headless` and `--identity-debug-csv` for non-UI tuning runs
 
 ---
 
@@ -336,6 +340,13 @@ Focus on:
 * [ ] Cat identity (Orange vs Goblin)
 * [ ] AI review layer
 
+### Phase 3A (Next Practical Step)
+
+* [ ] Build a small binary cat-identity classifier (`orange` vs `goblin`)
+* [ ] Reuse YOLO only for cat box detection; classifier runs on the detected cat crop
+* [ ] Start with offline replay and validation before any live production switch
+* [ ] Keep the current heuristic as fallback during the first classifier rollout
+
 ---
 
 ## 16. Decision Log
@@ -403,5 +414,38 @@ Focus on:
 * Added AP failover behavior: for matching SSID entries, ESP32 tries each BSSID for 10 seconds before switching to the next candidate and rescanning.
 * Added optional static IP support in firmware using env keys (`ESP32_STATIC_IP`, `ESP32_GATEWAY`, `ESP32_SUBNET`, `ESP32_DNS`), with DHCP fallback.
 * Current status: end-to-end API path is working; remaining hardware completion is DFPlayer SD card + speaker validation for final sound output.
+
+### 2026-04-17
+
+* Hardened Goblin identification around feeder false positives by adding torso-core evidence checks and blue-spill-aware white filtering.
+* Split Goblin runtime handling into `possible_goblin` and `confirmed_goblin`.
+* Confirmed Goblin now requires stronger frame evidence plus a stricter temporal gate before the normal 4-second alert fires.
+* `possible_goblin` is now a lower-priority evidence lane intended to preserve recall without promoting the full Goblin alert path.
+* Added offline replay controls: `--headless`, `--identity-debug-csv`, and `--possible-goblin-seconds`.
+* Discord bot now watches both confirmed Goblin alerts and `POSSIBLE_GOBLIN` events; only confirmed Goblin messages mention users.
+* Current next-step decision: try a small binary classifier before attempting Siamese / metric learning.
+* Reason: only two known cats need to be separated, the repo already has a useful starting sample set in `captures/` and `captures/clips/`, and binary classification is the fastest path to a practical v1.
+* Planned classifier workflow:
+  * use YOLO to detect `cat`
+  * crop the detected cat / torso region
+  * run a binary classifier that outputs `orange_prob` and `goblin_prob`
+  * feed those probabilities into the existing temporal identity logic instead of relying only on handcrafted color heuristics
+* Initial dataset plan:
+  * positives come from existing Orange and Goblin footage in `captures/`
+  * add hard negatives from false-alert Orange clips, especially bad-light feeder scenes
+  * prioritize difficult angles, crouching poses, partial-body views, and low-light clips over collecting many easy duplicates
+  * when extracting crops from video, sample every 3 frames to reduce near-duplicate images while keeping enough pose variation
+* Classifier execution notes:
+  * expected first-pass crop extraction across the current clip set is on the order of tens of minutes to about 1-2 hours, with manual cleanup still the main time cost
+  * keep full-frame YOLO detection, but use a tighter torso-focused identity crop for classifier input instead of relying on scene-level digital zoom
+  * prefer running classifier training and repeated validation on the RTX 5070 machine; keep extraction on whichever machine has easier access to the footage
+* Rollout plan:
+  * first build an offline replay dataset and validation loop
+  * then compare classifier output against the current heuristic on known false-positive and known Goblin clips
+  * only after that, gate live Goblin alerts with the classifier
+* Completed a minimal pre-classifier cleanup in `scripts/tapo_opencv_test.py`:
+  * grouped runtime/capture/activity/identity/output state into dataclasses
+  * extracted config/setup, lifecycle logging, alert/clip helpers, and preview rendering helpers
+  * kept `tapo_opencv_test.py` as the main entrypoint while making the identity stage easier to replace with a binary classifier
 
 ---

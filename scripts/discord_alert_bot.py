@@ -133,7 +133,10 @@ def send_discord_webhook(
 
 def is_goblin_alert_line(line: str) -> bool:
     text = line.lower()
-    return "alert: white-black cat in zone lasted" in text
+    return (
+        "alert: white-black cat in zone lasted" in text
+        or "possible_goblin: cat in zone lasted" in text
+    )
 
 
 def parse_user_ids(raw_ids: str) -> list[str]:
@@ -144,15 +147,17 @@ def parse_user_ids(raw_ids: str) -> list[str]:
 
 
 def build_discord_message(alert_line: str, user_ids: list[str]) -> str:
-    mention = " ".join(f"<@{uid}>" for uid in user_ids)
     base = alert_line.strip()
-    base = base.replace(
-        "] ALERT: white-black cat in zone lasted",
-        "] ALERT_GOBLIN: white-black cat in zone lasted",
-        1,
-    )
-    if mention:
-        return f"{base} {mention}"
+    if "ALERT: white-black cat in zone lasted" in base:
+        base = base.replace(
+            "] ALERT: white-black cat in zone lasted",
+            "] ALERT_GOBLIN: white-black cat in zone lasted",
+            1,
+        )
+        mention = " ".join(f"<@{uid}>" for uid in user_ids)
+        if mention:
+            return f"{base} {mention}"
+        return base
     return base
 
 
@@ -223,11 +228,14 @@ def main() -> int:
                     continue
                 sent_signatures.append(line)
 
-                content = build_discord_message(line, user_ids)
+                mention_users = (
+                    user_ids if "alert: white-black cat in zone lasted" in line.lower() else []
+                )
+                content = build_discord_message(line, mention_users)
                 ok, details = send_discord_webhook(
                     webhook_url=webhook_url,
                     content=content,
-                    user_ids=user_ids,
+                    user_ids=mention_users,
                     timeout_s=args.discord_timeout,
                     user_agent=args.discord_user_agent,
                 )
