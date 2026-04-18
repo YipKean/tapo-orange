@@ -243,6 +243,13 @@ def buildModel(pretrainedMode: str) -> tuple[nn.Module, str]:
 	return model, initialization
 
 
+def resolveCheckpointPretrainedMode(checkpoint: dict) -> str:
+	modelInitialization = str( checkpoint.get( "model_initialization", "" ) ).strip().lower()
+	if modelInitialization == "imagenet":
+		return "imagenet"
+	return "none"
+
+
 def buildSampler(samples: list[Sample]) -> WeightedRandomSampler:
 	labelCounts = Counter( sample.label for sample in samples )
 	weights = [1.0 / labelCounts[sample.label] for sample in samples]

@@ -7,7 +7,12 @@ import numpy as np
 import torch
 
 import tapo_opencv_test as base
-from train_identity_classifier import CLASS_NAMES, buildModel, resolveDevice
+from train_identity_classifier import (
+	CLASS_NAMES,
+	buildModel,
+	resolveCheckpointPretrainedMode,
+	resolveDevice,
+)
 
 
 CHECKPOINT_REL_PATH = Path( "artifacts/identity_classifier/best.pt" )
@@ -36,7 +41,8 @@ class ClassifierRuntime:
 		checkpoint = torch.load( self.checkpointPath, map_location=self.device )
 		self.imageSize = int( checkpoint.get( "image_size", 224 ) )
 		self.classNames = checkpoint.get( "class_names", list( CLASS_NAMES ) )
-		self.model = buildModel()
+		modelPretrainedMode = resolveCheckpointPretrainedMode( checkpoint )
+		self.model, _ = buildModel( modelPretrainedMode )
 		self.model.load_state_dict( checkpoint["model_state_dict"] )
 		self.model.to( self.device )
 		self.model.eval()

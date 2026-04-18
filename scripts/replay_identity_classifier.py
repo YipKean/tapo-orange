@@ -7,7 +7,12 @@ import numpy as np
 import torch
 from ultralytics import YOLO
 
-from train_identity_classifier import CLASS_NAMES, buildModel, resolveDevice
+from train_identity_classifier import (
+	CLASS_NAMES,
+	buildModel,
+	resolveCheckpointPretrainedMode,
+	resolveDevice,
+)
 
 
 def parseArgs() -> argparse.Namespace:
@@ -271,7 +276,8 @@ def main() -> int:
 	imageSize = int( checkpoint.get( "image_size", 224 ) )
 	classNames = checkpoint.get( "class_names", list( CLASS_NAMES ) )
 
-	model = buildModel()
+	modelPretrainedMode = resolveCheckpointPretrainedMode( checkpoint )
+	model, _ = buildModel( modelPretrainedMode )
 	model.load_state_dict( checkpoint["model_state_dict"] )
 	model.to( device )
 	model.eval()

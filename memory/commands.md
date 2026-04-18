@@ -83,12 +83,15 @@ python scripts/tapo_opencv_test.py --video captures\sample_footage.mp4 --zone 0.
 0.4220,0.5269;0.4845,0.5324;0.4838,0.6313;0.4227,0.6226
 0.3953,0.5670;0.4533,0.5683;0.4509,0.6782;0.3953,0.6695
 0.3852,0.5627;0.4595,0.5683;0.4588,0.6782;0.3828,0.6726
+0.3602,0.4947;0.4338,0.4935;0.4314,0.6226;0.3588,0.6140
 
 python scripts/tapo_opencv_test.py --zone-polygon "0.3953,0.5670;0.4533,0.5683;0.4509,0.6782;0.3953,0.6695" --zone-edit --save-clip-on-alert --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 10 --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda
 
 python scripts/tapo_opencv_test.py --video captures\1_orange.mp4 --zone-polygon "0.31,0.40;0.46,0.40;0.46,0.65;0.31,0.63" --zone-edit --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda
 
 python scripts/tapo_opencv_test.py --video captures\1.1_orange_misidentified_20260415.mp4 --zone-polygon "0.31,0.40;0.46,0.40;0.46,0.65;0.31,0.63" --zone-edit --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda
+
+python scripts/tapo_opencv_classifier_test.py --zone-polygon "0.3852,0.5627;0.4595,0.5683;0.4588,0.6782;0.3828,0.6726" --zone-edit --save-clip-on-alert --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 10 --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda
 
 # 12) Headless replay for a suspected false Goblin clip with debug CSV
 python scripts/tapo_opencv_test.py --video captures\clips\ALERT_2026-04-17_033355_GOBLIN.mp4 --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda --headless --identity-debug-csv tmp\replay_false_positive.csv
@@ -121,7 +124,9 @@ python scripts\replay_identity_classifier.py --video captures\clips\ALERT_GOBLIN
 .\.venv\Scripts\python.exe scripts\tapo_opencv_classifier_test.py --video captures\1.2_Goblin_eat.mp4 --motion-threshold 1.4 --process-fps 24 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda
 
 # 22) Run the full bowl pipeline with the classifier wrapper on a trusted Goblin alert clip
-.\.venv\Scripts\python.exe scripts\tapo_opencv_classifier_test.py --video captures\clips\ALERT_GOBLIN_2026-04-15_011511.mp4 --motion-threshold 1.4 --process-fps 24 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda
+0.3651,0.5207;0.4317,0.5238;0.4328,0.6251;0.3644,0.6189
+
+.\.venv\Scripts\python.exe scripts\tapo_opencv_classifier_test.py --video captures\clips\2026-02-13-orange-dark-clip-test.mp4 --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda
 
 python scripts/tapo_opencv_test.py --video captures\clips\2026-04-17-orange-miss-compilation.mp4 --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda --identity-debug-csv tmp\replay_tune.csv --id-goblin-support-conf 0.78 --id-goblin-support-margin 0.24 --id-goblin-torso-white-min 0.13 --id-goblin-periphery-margin-max 0.01 --id-lock-margin 0.13 --id-switch-margin 0.28
 
