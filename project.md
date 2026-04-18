@@ -464,6 +464,16 @@ Focus on:
   * best validation accuracy: about 0.754
   * Goblin precision was very high (about 0.993) but Goblin recall was only about 0.505
   * main interpretation: the model is conservative about calling Goblin and still misses too many true Goblin frames
+* Follow-up training improvement:
+  * updated `scripts/train_identity_classifier.py` to support pretrained MobileNetV3 initialization and Goblin-focused checkpoint selection
+  * new defaults now prefer ImageNet initialization and select the best checkpoint by `val_goblin_recall` instead of generic validation accuracy
+  * metrics now also record per-class F1 plus the model initialization and checkpoint-selection metadata
+* Pretrained rerun result:
+  * model initialization: `imagenet`
+  * checkpoint selection metric: `val_goblin_recall`
+  * best Goblin recall reached about 0.965 with Goblin precision about 0.978 and Goblin F1 about 0.972
+  * best overall validation accuracy during the rerun reached about 0.977
+  * main interpretation: pretrained initialization materially improved generalization and largely removed the earlier conservative-Goblin failure mode
 * Added a separate integration wrapper `scripts/tapo_opencv_classifier_test.py`:
   * imports `tapo_opencv_test.py` instead of copying it
   * keeps the original `tapo_opencv_test.py` untouched as the baseline / fallback
@@ -471,16 +481,18 @@ Focus on:
 * Current classifier-in-pipeline behavior:
   * label mapping is `orange -> orange`, `goblin -> white_black_dotted`, uncertain -> `unknown`
   * replay tests confirmed the wrapper runs end-to-end on CUDA with the trained checkpoint
-  * replay tests also showed identity flicker on Goblin bowl-eating scenes, including brief Orange/Goblin disagreement inside the same session
+  * earlier replay tests showed identity flicker on Goblin bowl-eating scenes, including brief Orange/Goblin disagreement inside the same session
+  * the stronger pretrained checkpoint is now the preferred candidate for the next unseen-clip replay pass
 * Current diagnosis:
-  * the classifier likely needs more Goblin bowl-eating samples, especially crouched feeder-angle torso views
-  * similar Goblin-eating shots from other bowls / angles may still help if posture, lighting, and visible torso pattern are close enough
-  * replay on known clips is useful for pipeline validation but is not enough proof of generalization if the model has already seen similar source clips during training
+  * the earlier weak-recall result was substantially improved by changing initialization and checkpoint selection, so the main bottleneck is no longer obviously the cleaned dataset itself
+  * some overfit risk still exists because training accuracy approaches 1.0 while later validation epochs wobble after the best checkpoint
+  * replay on known clips is still useful for pipeline validation but is not enough proof of generalization if the model has already seen similar source clips during training
+  * unseen-clip replay is now the highest-value next test before changing the architecture or collecting much more data
   * the cleaned / expanded classifier dataset is expected to be uploaded to Google Drive later for backup and easier sharing across machines
 * Current rollout decision:
   * do not let the classifier become the sole live blocker yet
   * keep the current heuristic / bowl-access pipeline as the main protection path
-  * treat the classifier as supplemental evidence only until Goblin-eating recall improves and unseen-clip replay looks reliable
+  * treat the classifier as supplemental evidence until unseen-clip replay confirms the stronger pretrained checkpoint is reliable
   * bias live decision-making toward safety near the bowl: false positives are acceptable, missed Goblin-eating events are not
 
 ---

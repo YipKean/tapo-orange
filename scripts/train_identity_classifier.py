@@ -10,7 +10,7 @@ import cv2
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
-from torchvision.models import mobilenet_v3_small
+from torchvision.models import MobileNet_V3_Small_Weights, mobilenet_v3_small
 
 
 CLASS_NAMES = ( "orange", "goblin" )
@@ -119,6 +119,21 @@ def parseArgs() -> argparse.Namespace:
 		help="DataLoader worker count.",
 	)
 	parser.add_argument(
+		"--pretrained",
+		choices=( "imagenet", "auto", "none" ),
+		default="imagenet",
+		help=(
+			"Backbone initialization. imagenet uses torchvision pretrained weights, "
+			"auto falls back to random init if pretrained weights are unavailable."
+		),
+	)
+	parser.add_argument(
+		"--selection-metric",
+		choices=( "val_accuracy", "val_goblin_recall", "val_goblin_f1" ),
+		default="val_goblin_recall",
+		help="Metric used to choose the best checkpoint.",
+	)
+	parser.add_argument(
 		"--seed",
 		type=int,
 		default=1337,
@@ -208,8 +223,24 @@ def resolveSamples(
 	return loadSamples( datasetDir, manifestName )
 
 
-def buildModel() -> nn.Module:
-	return mobilenet_v3_small( weights=None, num_classes=len( CLASS_NAMES ) )
+def buildModel(pretrainedMode: str) -> tuple[nn.Module, str]:
+	weights = None
+	initialization = "random"
+
+	if pretrainedMode in {"imagenet", "auto"}:
+		try:
+			weights = MobileNet_V3_Small_Weights.IMAGENET1K_V1
+			initialization = "imagenet"
+		except Exception:
+			if pretrainedMode == "imagenet":
+				raise
+
+	model = mobilenet_v3_small( weights=weights )
+	finalLayer = model.classifier[-1]
+	if not isinstance( finalLayer, nn.Linear ):
+		raise TypeError( "Unexpected MobileNetV3 classifier layout." )
+	model.classifier[-1] = nn.Linear( finalLayer.in_features, len( CLASS_NAMES ) )
+	return model, initialization
 
 
 def buildSampler(samples: list[Sample]) -> WeightedRandomSampler:
@@ -267,6 +298,13 @@ def evaluate(
 		metrics[f"{className}_recall"] = (
 			truePositives[className] / recallDenom if recallDenom else 0.0
 		)
+		precision = metrics[f"{className}_precision"]
+		recall = metrics[f"{className}_recall"]
+		metrics[f"{className}_f1"] = (
+			( 2.0 * precision * recall ) / ( precision + recall )
+			if ( precision + recall )
+			else 0.0
+		)
 	return metrics
 
 
@@ -299,7 +337,8 @@ def train(args: argparse.Namespace) -> int:
 		num_workers=args.workers,
 	)
 
-	model = buildModel().to( device )
+	model, modelInitialization = buildModel( args.pretrained )
+	model = model.to( device )
 	lossFn = nn.CrossEntropyLoss()
 	optimizer = torch.optim.AdamW(
 		model.parameters(),
@@ -307,7 +346,7 @@ def train(args: argparse.Namespace) -> int:
 		weight_decay=args.weight_decay,
 	)
 
-	bestValAccuracy = -1.0
+	bestSelectionMetric = -1.0
 	history: list[dict[str, float | int]] = []
 	bestCheckpointPath = outputDir / "best.pt"
 	metricsPath = outputDir / "metrics.json"
@@ -344,8 +383,10 @@ def train(args: argparse.Namespace) -> int:
 			"val_accuracy": valMetrics["accuracy"],
 			"val_orange_precision": valMetrics["orange_precision"],
 			"val_orange_recall": valMetrics["orange_recall"],
+			"val_orange_f1": valMetrics["orange_f1"],
 			"val_goblin_precision": valMetrics["goblin_precision"],
 			"val_goblin_recall": valMetrics["goblin_recall"],
+			"val_goblin_f1": valMetrics["goblin_f1"],
 		}
 		history.append( epochMetrics )
 		print(
@@ -354,13 +395,17 @@ def train(args: argparse.Namespace) -> int:
 			f"val_loss={valMetrics['loss']:.4f} val_acc={valMetrics['accuracy']:.4f}"
 		)
 
-		if valMetrics["accuracy"] > bestValAccuracy:
-			bestValAccuracy = valMetrics["accuracy"]
+		selectionValue = float( epochMetrics[args.selection_metric] )
+		if selectionValue > bestSelectionMetric:
+			bestSelectionMetric = selectionValue
 			torch.save(
 				{
 					"model_state_dict": model.state_dict(),
 					"class_names": list( CLASS_NAMES ),
 					"image_size": args.image_size,
+					"model_initialization": modelInitialization,
+					"selection_metric": args.selection_metric,
+					"selection_metric_value": selectionValue,
 				},
 				bestCheckpointPath,
 			)
@@ -371,8 +416,10 @@ def train(args: argparse.Namespace) -> int:
 		"train_samples": len( trainSamples ),
 		"val_samples": len( valSamples ),
 		"class_names": list( CLASS_NAMES ),
+		"model_initialization": modelInitialization,
+		"selection_metric": args.selection_metric,
 		"history": history,
-		"best_val_accuracy": bestValAccuracy,
+		"best_selection_metric": bestSelectionMetric,
 		"best_checkpoint": str( bestCheckpointPath ),
 	}
 	metricsPath.write_text( json.dumps( summary, indent=2 ), encoding="utf-8" )
