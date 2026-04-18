@@ -15,7 +15,7 @@ from train_identity_classifier import (
 )
 
 
-CHECKPOINT_REL_PATH = Path( "artifacts/identity_classifier/best.pt" )
+CHECKPOINT_REL_PATH = Path( "artifacts/identity_classifier_pretrained/best.pt" )
 DEFAULT_DEVICE = "cuda"
 UNKNOWN_MARGIN = 0.06
 

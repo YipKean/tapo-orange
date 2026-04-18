@@ -2148,7 +2148,7 @@ def main() -> int:
 
     while True:
         now = time.perf_counter()
-        if now < runtime_state.capture.next_frame_at:
+        if now < next_frame_at:
             if not config.is_video_source:
                 # For live RTSP, keep grabbing during idle time so retrieve()
                 # returns the freshest frame instead of a buffered stale frame.
@@ -2243,10 +2243,12 @@ def main() -> int:
                     break
                 # Transient FFmpeg decode gaps can happen on RTSP; skip this tick.
                 next_frame_at = now + frame_interval
+                runtime_state.capture.next_frame_at = next_frame_at
                 continue
             rtsp_retrieve_failures = 0
 
         next_frame_at = now + frame_interval
+        runtime_state.capture.next_frame_at = next_frame_at
 
         frame_count += 1
         runtime_state.lifecycle.frame_count = frame_count
