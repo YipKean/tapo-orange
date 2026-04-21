@@ -76,7 +76,10 @@ function Test-TapoRunning {
     try {
         $procs = Get-CimInstance Win32_Process -Filter "Name = 'python.exe' OR Name = 'python3.exe'" -ErrorAction Stop
         foreach ($p in $procs) {
-            if ($null -ne $p.CommandLine -and $p.CommandLine -match 'scripts[\\/]+tapo_opencv_test\.py') {
+            if (
+                $null -ne $p.CommandLine -and
+                $p.CommandLine -match 'scripts[\\/]+(tapo_opencv_test|tapo_opencv_classifier_test)\.py'
+            ) {
                 return $true
             }
         }

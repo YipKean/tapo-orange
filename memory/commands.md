@@ -126,7 +126,7 @@ python scripts\replay_identity_classifier.py --video captures\clips\ALERT_GOBLIN
 # 22) Run the full bowl pipeline with the classifier wrapper on a trusted Goblin alert clip
 0.3651,0.5207;0.4317,0.5238;0.4328,0.6251;0.3644,0.6189
 
-.\.venv\Scripts\python.exe scripts\tapo_opencv_classifier_test.py --zone-polygon "0.3651,0.5207;0.4317,0.5238;0.4328,0.6251;0.3644,0.6189" --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda
+.\.venv\Scripts\python.exe scripts\tapo_opencv_classifier_test.py --zone-polygon "0.3651,0.5207;0.4317,0.5238;0.4328,0.6251;0.3644,0.6189" --zone-edit --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --save-clip-on-alert --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda
 
 python scripts/tapo_opencv_test.py --video captures\clips\2026-04-17-orange-miss-compilation.mp4 --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda --identity-debug-csv tmp\replay_tune.csv --id-goblin-support-conf 0.78 --id-goblin-support-margin 0.24 --id-goblin-torso-white-min 0.13 --id-goblin-periphery-margin-max 0.01 --id-lock-margin 0.13 --id-switch-margin 0.28
 
