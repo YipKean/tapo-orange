@@ -1443,12 +1443,15 @@ def log_run_start(
 def finalize_run_log(
     event_log_dir: Path,
     lifecycle: RunLifecycleState,
+    config: RuntimeConfig,
 ) -> None:
     if lifecycle.ended:
         return
     run_ended_at = time.time()
     run_end_message = (
-        f"[{format_timestamp(run_ended_at)}] APP_END: reason={lifecycle.reason} "
+        f"[{format_timestamp(run_ended_at)}] APP_END: "
+        f"source={source_text_for_config(config)} "
+        f"reason={lifecycle.reason} "
         f"duration={run_ended_at - lifecycle.started_at:.1f}s "
         f"frames={lifecycle.frame_count}"
     )
@@ -2096,7 +2099,9 @@ def main() -> int:
     setup_identity_debug_writer(
         runtime_state.output, config.identity_debug_csv_path
     )
-    atexit.register(lambda: finalize_run_log(config.event_log_dir, runtime_state.lifecycle))
+    atexit.register(
+        lambda: finalize_run_log(config.event_log_dir, runtime_state.lifecycle, config)
+    )
     log_run_start(
         config.event_log_dir,
         runtime_state.lifecycle,
@@ -2892,7 +2897,7 @@ def main() -> int:
     cap.release()
     if not args.headless:
         cv2.destroyAllWindows()
-    finalize_run_log(config.event_log_dir, runtime_state.lifecycle)
+    finalize_run_log(config.event_log_dir, runtime_state.lifecycle, config)
     return 0
 
 

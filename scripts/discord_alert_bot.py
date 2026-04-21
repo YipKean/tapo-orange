@@ -151,6 +151,11 @@ def is_discord_event_line(line: str) -> bool:
 	return is_goblin_alert_line(line) or is_app_start_line(line) or is_app_end_line(line)
 
 
+def is_rtsp_lifecycle_line(line: str) -> bool:
+	text = line.lower()
+	return "source=rtsp stream" in text
+
+
 def parse_user_ids(raw_ids: str) -> list[str]:
 	if not raw_ids:
 		return []
@@ -248,6 +253,8 @@ def main() -> int:
 			for raw_line in new_lines:
 				line = raw_line.strip()
 				if not line or not is_discord_event_line(line):
+					continue
+				if (is_app_start_line(line) or is_app_end_line(line)) and not is_rtsp_lifecycle_line(line):
 					continue
 				if line in sent_signatures:
 					continue
