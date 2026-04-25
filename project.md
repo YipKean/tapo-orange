@@ -247,6 +247,12 @@ Discord path:
 OpenCV alert log â†’ scripts/discord_alert_bot.py â†’ Discord webhook
 ```
 
+Current Discord bot notes:
+
+* Watches the event log and sends webhook notifications for Goblin-related events and RTSP lifecycle events.
+* Sends startup/shutdown notifications for RTSP runs as `RTSP_STARTED` / `RTSP_ENDED`.
+* Sends a final webhook message when the Discord bot itself shuts down cleanly (for example normal exit or `Ctrl+C`): `DISCORD_BOT_ENDED: Discord alert bot turning off.`
+
 Current ESP32 API baseline (`tapo-alarm`):
 
 * `GET /health` â†’ health/status check
@@ -309,6 +315,29 @@ Focus on:
 * fast reaction
 * simple logic
 * reliable trigger
+
+---
+
+## 14A. Operator Tooling
+
+### Command Builder GUI
+
+* Local operator GUI now exists at `scripts/command_builder_gui.py`.
+* Purpose: build long Tapo/watchdog commands by ticking options and filling values instead of hand-editing the CLI each time.
+* The GUI can:
+  * load the current `WATCHDOG_TAPO_COMMAND` from `.env`
+  * copy the generated command
+  * write the generated command back into `.env`
+* Command rendering is now PowerShell-safe.
+  * Important because flags like `--zone-polygon` contain semicolons and must be quoted correctly for PowerShell.
+* Tooltip/help text for the builder now lives in `scripts/i18n/tooltips.json` so UI help can be updated without editing Python code.
+* Current UX note:
+  * builder supports per-option enable/disable ticks and lightweight custom `Ctrl+Z` / `Ctrl+Y` entry history because this Tk build does not support native `Entry(..., undo=True)` history.
+
+### Project Skill: Writing Tooltips
+
+* Canonical tooltip-writing guidance now lives in `skills/tooltip-writing/SKILL.md`.
+* Use that skill when adding or revising entries in `scripts/i18n/tooltips.json`.
 
 ---
 
@@ -494,5 +523,54 @@ Focus on:
   * keep the current heuristic / bowl-access pipeline as the main protection path
   * treat the classifier as supplemental evidence until unseen-clip replay confirms the stronger pretrained checkpoint is reliable
   * bias live decision-making toward safety near the bowl: false positives are acceptable, missed Goblin-eating events are not
+
+### 2026-04-19 to 2026-04-21
+
+* Fixed a classifier integration regression after the training script changed `buildModel` to require a pretrained-mode argument.
+  * Added checkpoint-aware model reconstruction so `scripts/tapo_opencv_classifier_test.py` and `scripts/replay_identity_classifier.py` rebuild the MobileNetV3 head using the checkpoint's recorded initialization metadata instead of calling `buildModel()` with no argument.
+  * Verified the classifier wrapper now starts cleanly again on CUDA replay runs.
+* Clarified current low-light YOLO guidance:
+  * `--cat-preprocess night-lite` is a grayscale + CLAHE helper intended for darker / IR-like scenes, not a neutral default for normal lighting.
+  * `night-lite` may help mild low-light recall, while `night` is the heavier denoise + CLAHE path for noisier IR frames.
+  * Current operating advice is still to keep normal-light RTSP on `--cat-preprocess none` unless replay evidence shows a clear benefit from low-light preprocessing.
+* Fixed an RTSP pacing bug in `scripts/tapo_opencv_test.py`.
+  * The live loop was checking a stale `next_frame_at` value from runtime state while updating a separate local scheduler value, which could let live RTSP processing run faster than the requested `--process-fps`.
+  * The loop now checks and updates the same schedule value, so the configured processing cap is respected more closely during live runs.
+* Expanded Discord lifecycle notifications in `scripts/discord_alert_bot.py`.
+  * The bot now sends startup and shutdown webhook messages for live RTSP runs using `RTSP_STARTED` and `RTSP_ENDED` labels.
+  * Shutdown notifications now include the logged reason and append `Please monitor manually.`
+  * Lifecycle notifications are now intentionally filtered to RTSP-only runs; local `--video` replays do not send Discord start/end notifications.
+* Updated lifecycle logging so `APP_END` now includes `source=...` just like `APP_START`, allowing downstream tooling to distinguish RTSP runs from local video replays.
+* Diagnosed and fixed a duplicate-runtime watchdog issue.
+  * The PowerShell watchdog process check only matched `tapo_opencv_test.py`, so it could miss a running `tapo_opencv_classifier_test.py` process and start a second RTSP pipeline.
+  * The watchdog now recognizes both script names as active Tapo runs.
+  * The `.env` `WATCHDOG_TAPO_COMMAND` now includes `--launch-origin watchdog_ps1`, so watchdog-launched classifier runs no longer appear as `launch_origin=manual` in `APP_START`.
+  * Operational takeaway: paired `APP_END` entries with similar durations / frame counts are a strong sign that two RTSP processes were alive at once.
+* Confirmed the current confirmed-Goblin timing model:
+  * confirmed Goblin is not simply "classifier says Goblin for 1 second"
+  * it still requires recent Goblin-support frames, stable `white_black_dotted` identity, and then `--id-confirmed-goblin-hold-seconds` to elapse
+  * the current safer tuning path is to lower `--id-confirmed-goblin-support-count` in replay tests before weakening the rest of the Goblin gate
+
+### 2026-04-21
+
+* Added a local command-builder GUI at `scripts/command_builder_gui.py` for daily operator use.
+  * Supports per-option ticks, loading/saving `WATCHDOG_TAPO_COMMAND`, PowerShell-safe command rendering, and externalized tooltip text in `scripts/i18n/tooltips.json`.
+  * Hardened GUI behavior around shutdown/tooltips and added lightweight custom `Ctrl+Z` / `Ctrl+Y` entry history because the local Tk build does not support native `Entry` undo.
+* Clarified current classifier wrapper behavior:
+  * in `scripts/tapo_opencv_classifier_test.py`, legacy evidence fields such as `torso_core_white_ratio` are compatibility placeholders during classifier mode rather than literal measured white-ratio heuristics.
+  * the explicit torso-white heuristic gate is ignored in classifier-mode Goblin support checks; support is driven by classifier confidence and margin instead.
+* Expanded Discord bot shutdown behavior:
+  * `scripts/discord_alert_bot.py` now sends a clean shutdown webhook message when the bot exits normally or via `Ctrl+C`.
+  * This bot-self-shutdown ping is separate from the RTSP pipeline `RTSP_ENDED` lifecycle message.
+
+### 2026-04-24
+
+* Fixed a Windows watchdog launch regression for `.env` commands generated in PowerShell-safe format.
+  * Symptom: watchdog repeatedly logged starts, but the child process exited before RTSP startup with `could not convert string to float: "'0.3651"`.
+  * Cause: `scripts/watchdog_tapo.ps1` ran `WATCHDOG_TAPO_COMMAND` through `cmd.exe /c`, where single quotes around `--zone-polygon` were passed literally to Python.
+  * Fix: watchdog now executes `.env` commands through PowerShell so the command-builder output and watchdog launch path use the same quoting rules.
+* Current concern: live runs may be triggering `POSSIBLE_GOBLIN` too often.
+  * One plausible cause is Goblin wearing a collar, which may make YOLO identify the cat inconsistently across frames.
+  * Keep this as an observation to validate with saved clips / debug CSV before retuning the possible-Goblin thresholds.
 
 ---

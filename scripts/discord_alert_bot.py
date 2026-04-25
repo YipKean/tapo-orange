@@ -191,6 +191,21 @@ def build_discord_message(alert_line: str, user_ids: list[str]) -> str:
 	return base
 
 
+def send_bot_shutdown_message(
+	webhook_url: str,
+	timeout_s: float,
+	user_agent: str,
+) -> tuple[bool, str]:
+	content = f"[{format_timestamp(time.time())}] DISCORD_BOT_ENDED: Discord alert bot turning off."
+	return send_discord_webhook(
+		webhook_url=webhook_url,
+		content=content,
+		user_ids=[],
+		timeout_s=timeout_s,
+		user_agent=user_agent,
+	)
+
+
 def main() -> int:
 	repo_root = Path(__file__).resolve().parents[1]
 	load_dotenv(repo_root / ".env")
@@ -224,6 +239,8 @@ def main() -> int:
 	last_seen_day = ""
 	file_pos = 0
 	sent_signatures: deque[str] = deque(maxlen=200)
+	shutdown_reason = "normal_exit"
+	shutdown_ping_sent = False
 
 	try:
 		while True:
@@ -287,8 +304,23 @@ def main() -> int:
 
 			time.sleep(args.poll_seconds)
 	except KeyboardInterrupt:
+		shutdown_reason = "keyboard_interrupt"
 		print(f"[{format_timestamp(time.time())}] Discord bot stopped.")
 		return 0
+	finally:
+		if not shutdown_ping_sent and webhook_url:
+			ok, details = send_bot_shutdown_message(
+				webhook_url=webhook_url,
+				timeout_s=args.discord_timeout,
+				user_agent=args.discord_user_agent,
+			)
+			shutdown_ping_sent = True
+			status_line = (
+				f"[{format_timestamp(time.time())}] DISCORD_BOT_SHUTDOWN_PING "
+				f"{'OK' if ok else 'FAILED'} reason={shutdown_reason} {details}"
+			)
+			print(status_line)
+			append_event_log(event_log_dir, status_line)
 
 
 if __name__ == "__main__":

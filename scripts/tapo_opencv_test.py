@@ -1365,6 +1365,17 @@ def print_zone_value(
     )
 
 
+def snapshot_identity_suffix(identity_label: str) -> str:
+    normalized = (identity_label or "unknown").strip().lower()
+    if normalized == "orange":
+        return "orange"
+    if normalized in {"white_black_dotted", "confirmed_goblin", "goblin"}:
+        return "goblin"
+    if normalized == "possible_goblin":
+        return "possible_goblin"
+    return "unknown"
+
+
 def reset_identity_presence(presence: dict[str, IdentityPresenceState]) -> None:
     for state in presence.values():
         state.seen_streak = 0
@@ -2721,8 +2732,10 @@ def main() -> int:
                 args.snapshot_cooldown == 0
                 or event_now - last_snapshot_at >= args.snapshot_cooldown
             ):
-                snapshot_name = datetime.fromtimestamp(event_now).strftime(
-                    "cat_%Y%m%d_%H%M%S.jpg"
+                identity_suffix = snapshot_identity_suffix(cat_identity_in_zone)
+                snapshot_name = (
+                    datetime.fromtimestamp(event_now).strftime("cat_%Y%m%d_%H%M%S")
+                    + f"_{identity_suffix}.jpg"
                 )
                 snapshot_path = snapshot_dir / snapshot_name
                 if cv2.imwrite(str(snapshot_path), frame):
