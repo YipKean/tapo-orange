@@ -114,6 +114,27 @@ while True:
   * GPU inference available through Ultralytics on CUDA
   * optional image-size tuning via `--cat-imgsz`
   * optional IR helper preprocessing via `--cat-preprocess night` / `night-lite`
+  * optional collar-aware pet fallback (`--cat-collar-fallback`) implemented in `scripts/pet_detection.py` for cases where YOLO detects the animal but misses class `cat`; current collar replay showed Orange detected mostly as COCO `20` (elephant) and sometimes `16` (dog)
+  * classifier-wrapper collar filtering in `scripts/collar_filter.py`, which suppresses unusual saturated green/blue collar colors inside the identity crop before Orange/Goblin inference
+
+Current detection pipeline:
+
+```text
+YOLO animal box
+  accepted classes:
+    15 = cat
+    optional collar fallback: 16 = dog, 20 = elephant
+        ↓
+zone overlap check
+        ↓
+Orange/Goblin classifier crop
+        ↓
+temporal identity + dwell logic
+        ↓
+event log / ESP32 sound / Discord
+```
+
+Important: YOLO only finds an animal-ish box. Orange vs Goblin is still decided by the classifier wrapper, not by YOLO class name.
 
 ---
 
@@ -128,6 +149,7 @@ while True:
 ### 4.6 Evidence Capture
 
 * In cat-detection mode, save one snapshot when cat enters zone (cooldown controlled)
+* If an alert fires without an existing related snapshot, save an alert-time snapshot and include it in the log line
 * In motion-only mode, save one snapshot when motion starts
 * Append threshold-reaching events to `event-log/YYYY-MM-DD.log`
 * Include related snapshot filename in the event log when available
@@ -250,15 +272,32 @@ OpenCV alert log â†’ scripts/discord_alert_bot.py â†’ Discord webhook
 Current Discord bot notes:
 
 * Watches the event log and sends webhook notifications for Goblin-related events and RTSP lifecycle events.
+* When an alert log line includes `snapshot=...`, attaches the referenced image from `captures/` to the Discord webhook message.
+* Mentions can target one or more Discord users through `DISCORD_USER_ID` or comma-separated `DISCORD_USER_IDS`.
+* Temporary disable switch: set `DISCORD_BOT_ENABLED=false` in `.env`; set it back to `true` before live monitoring if Discord alerts are needed.
+* Temporary replay/screenshot test switch: set `DISCORD_SEND_TEST_ALERTS=true` to send all `ALERT:` lines, including Orange alerts from local video replay, with configured user mentions. Set it back to `false` for normal Goblin-only Discord alerts.
 * Sends startup/shutdown notifications for RTSP runs as `RTSP_STARTED` / `RTSP_ENDED`.
+* Sends a Discord bot self-startup webhook when the bot process launches: `DISCORD_BOT_STARTED: Discord alert bot is watching event logs.`
 * Sends a final webhook message when the Discord bot itself shuts down cleanly (for example normal exit or `Ctrl+C`): `DISCORD_BOT_ENDED: Discord alert bot turning off.`
 
 Current ESP32 API baseline (`tapo-alarm`):
 
 * `GET /health` â†’ health/status check
+* `GET /api/df-status` â†’ DFPlayer debug/status check (`df_ready`, volume, SD file count, playback state)
 * `POST /api/alert` â†’ alert trigger endpoint from PC service
 * `GET /api/play?track=<n>` â†’ manual DFPlayer track trigger
 * `GET /api/ping-pc` â†’ optional reverse ping from ESP32 to PC endpoint
+
+Current ESP32/DFPlayer hardware status:
+
+* Firmware builds and uploads through PlatformIO environment `main_run`.
+* ESP32 is reachable over LAN at the current DHCP address during testing.
+* `/health`, `/api/play?track=1`, and `/api/alert` return successfully.
+* DFPlayer UART communication is confirmed (`DFPlayer OK`, `df_ready=true`).
+* DFPlayer command path is confirmed: serial logs show `[PLAY] Sending DFPlayer play command for track 1` followed by `[DFP] event=PlayFinished, value=1`.
+* Current firmware volume is `25` out of `30`; max-volume test can use `player.volume( 30 )`.
+* Audible output is not yet confirmed. Since DFPlayer reports `PlayFinished`, remaining likely causes are speaker/output wiring, speaker condition, DFPlayer amplifier/output hardware, power stability, or the specific audio file being silent/too short/too quiet.
+* Speaker wiring expectation: DFPlayer `SPK1` to speaker red and `SPK2` to speaker black; polarity is not critical for a single small speaker, but the speaker should use `SPK1`/`SPK2`, not `DAC_L`/`DAC_R`.
 
 ---
 
@@ -333,6 +372,25 @@ Focus on:
 * Tooltip/help text for the builder now lives in `scripts/i18n/tooltips.json` so UI help can be updated without editing Python code.
 * Current UX note:
   * builder supports per-option enable/disable ticks and lightweight custom `Ctrl+Z` / `Ctrl+Y` entry history because this Tk build does not support native `Entry(..., undo=True)` history.
+
+### Current Watchdog Command Shape
+
+* The active `.env` `WATCHDOG_TAPO_COMMAND` currently uses `scripts/tapo_opencv_classifier_test.py` through the PowerShell watchdog.
+* Current live polygon: `0.3619,0.4880;0.4307,0.4978;0.4283,0.5979;0.3595,0.5893`.
+* Current live mode highlights:
+  * `--cat-detect-mode motion`
+  * `--motion-threshold 1.4`
+  * `--process-fps 5`
+  * `--snapshot-cooldown 3`
+  * `--alert-seconds 4`
+  * `--save-clip-on-alert --clip-seconds 10`
+  * `--cat-model models\yolov8m.pt`
+  * `--cat-confidence 0.08`
+  * `--cat-imgsz 2080`
+  * `--device cuda`
+  * `--cat-zone-overlap 0.25`
+  * `--cat-collar-fallback --cat-collar-fallback-class-ids 16,20 --cat-collar-fallback-confidence 0.25`
+  * `--launch-origin watchdog_ps1`
 
 ### Project Skill: Writing Tooltips
 
@@ -572,5 +630,61 @@ Focus on:
 * Current concern: live runs may be triggering `POSSIBLE_GOBLIN` too often.
   * One plausible cause is Goblin wearing a collar, which may make YOLO identify the cat inconsistently across frames.
   * Keep this as an observation to validate with saved clips / debug CSV before retuning the possible-Goblin thresholds.
+* Added modular collar-aware detection fallback:
+  * `scripts/pet_detection.py` owns class-id parsing, YOLO class detection, duplicate merging, and legacy tuple conversion
+  * `scripts/tapo_opencv_test.py` calls it via `--cat-collar-fallback`
+  * known Orange collar clip needs fallback class ids `16,20` at confidence `0.25`; raw YOLO classified the clip mostly as COCO `20` (elephant) and sometimes `16` (dog), not `cat`
+* Added classifier-layer collar filtering:
+  * `scripts/collar_filter.py` masks unusual saturated green/blue collar pixels in the identity crop
+  * `scripts/tapo_opencv_classifier_test.py` applies the filter before classifier preprocessing
+  * this helps identity inference after a candidate box exists, but it does not recover frames where YOLO failed to produce an accepted cat/pet candidate
+* Clarified collar replay diagnosis:
+  * The alert-zone rectangle/polygon is not the YOLO cat box.
+  * For `captures/clips/ALERT_2026-04-26_125944_ORANGE.mp4`, replay without fallback produced no `Cat entered zone` events.
+  * Raw YOLO found animal-shaped detections overlapping the bowl zone, but mostly labeled them as `20` (elephant) and sometimes `16` (dog), not `15` (cat).
+  * Replaying with `--cat-collar-fallback --cat-collar-fallback-class-ids 16,20 --cat-collar-fallback-confidence 0.25` produced `Orange cat in zone entered` and `ALERT: orange cat in zone lasted 4.1s`.
+  * Active watchdog command should keep fallback class ids `16,20`; YOLO remains only the box finder, while the classifier wrapper decides Orange vs Goblin.
+
+### 2026-04-28
+
+* Enabled actual DFPlayer playback in `tapo-alarm/src/main.cpp` by setting `HAS_SD_CARD = true`.
+* Updated `scripts/discord_alert_bot.py` so Goblin and possible-Goblin webhook alerts attach the alert snapshot when the event log line includes `snapshot=...`.
+* Added temporary Discord bot kill switch for replay/testing:
+  * `.env` key: `DISCORD_BOT_ENABLED=false`
+  * when disabled, `scripts/discord_alert_bot.py` exits before sending startup, alert, or shutdown webhook messages
+  * set `DISCORD_BOT_ENABLED=true` before live monitoring if Discord alerts are needed
+* Added temporary Discord replay test mode:
+  * `.env` key: `DISCORD_SEND_TEST_ALERTS=true`
+  * sends all `ALERT:` lines, including Orange alerts from local video replay, so screenshot attachment and user-mention delivery can be tested in Discord
+  * normal production mode should use `DISCORD_SEND_TEST_ALERTS=false` for Goblin-only alert pings
+* Added Discord bot self-startup ping:
+  * when `scripts/discord_alert_bot.py` starts and the bot is enabled, it sends `DISCORD_BOT_STARTED: Discord alert bot is watching event logs.`
+  * startup ping status is logged as `DISCORD_BOT_STARTUP_PING OK/FAILED`
+* Confirmed Discord user mentions in replay/test mode:
+  * `DISCORD_USER_IDS` supports comma-separated user IDs
+  * with `DISCORD_SEND_TEST_ALERTS=true`, Orange replay alerts are sent for screenshot testing and include configured mentions
+* Updated `scripts/tapo_opencv_test.py` so alert logging saves an alert-time snapshot when the earlier cat-entry snapshot is missing, making future alert log lines much more likely to include `snapshot=...`.
+* Added DFPlayer diagnostics to the ESP32 firmware:
+  * serial logging for every play request
+  * serial logging for DFPlayer events/errors (`PlayFinished`, `Cannot find file`, `Card not found / busy`, etc.)
+  * `GET /api/df-status` for live `df_ready`, volume, SD file count, and state checks
+* Confirmed PlatformIO build and upload workflow for `tapo-alarm`:
+  * build: `pio run -e main_run`
+  * upload: `pio run -e main_run -t upload --upload-port COM4`
+  * monitor: `pio device monitor -p COM4 -b 115200`
+* Confirmed ESP32 Wi-Fi/API path is working on the test network:
+  * serial boot shows Wi-Fi connected and HTTP server running
+  * `GET /health`, `GET /api/play?track=1`, and `POST /api/alert` respond successfully
+* Confirmed DFPlayer command path reaches playback completion:
+  * `/api/df-status` showed `df_ready=true` and volume `25`
+  * `/api/play?track=1` returned `play_sent`
+  * serial log showed `[DFP] event=PlayFinished, value=1`
+* Current blocker for the sound trigger is audible speaker output, not the PC-to-ESP32 API or DFPlayer UART command path.
+* Next hardware checks:
+  * confirm speaker is connected to DFPlayer `SPK1`/`SPK2`
+  * confirm DFPlayer is powered from stable 5V/VIN with common ground to ESP32
+  * test max volume with `player.volume( 30 )`
+  * test a known loud/long `0001.mp3`
+  * test speaker continuity or swap speaker/DFPlayer if still silent
 
 ---

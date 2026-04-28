@@ -49,7 +49,7 @@ const char* ESP32_STATIC_IP = ESP32_STATIC_IP_ENV;
 const char* ESP32_GATEWAY = ESP32_GATEWAY_ENV;
 const char* ESP32_SUBNET = ESP32_SUBNET_ENV;
 const char* ESP32_DNS = ESP32_DNS_ENV;
-const bool HAS_SD_CARD = false;
+const bool HAS_SD_CARD = true;
 
 HardwareSerial mySerial( 1 ); // UART1
 DFRobotDFPlayerMini player;
@@ -62,6 +62,73 @@ int32_t apChannels[MAX_AP_CANDIDATES];
 int apRssis[MAX_AP_CANDIDATES];
 String apBssidTexts[MAX_AP_CANDIDATES];
 int apCandidateCount = 0;
+
+const char* dfPlayerTypeToText( uint8_t type ) {
+	switch ( type ) {
+		case TimeOut:
+			return "TimeOut";
+		case WrongStack:
+			return "WrongStack";
+		case DFPlayerCardInserted:
+			return "CardInserted";
+		case DFPlayerCardRemoved:
+			return "CardRemoved";
+		case DFPlayerCardOnline:
+			return "CardOnline";
+		case DFPlayerPlayFinished:
+			return "PlayFinished";
+		case DFPlayerError:
+			return "Error";
+		case DFPlayerUSBInserted:
+			return "USBInserted";
+		case DFPlayerUSBRemoved:
+			return "USBRemoved";
+		case DFPlayerUSBOnline:
+			return "USBOnline";
+		case DFPlayerCardUSBOnline:
+			return "CardUSBOnline";
+		case DFPlayerFeedBack:
+			return "FeedBack";
+		default:
+			return "Unknown";
+	}
+}
+
+const char* dfPlayerErrorToText( uint16_t value ) {
+	switch ( value ) {
+		case Busy:
+			return "Card not found / busy";
+		case Sleeping:
+			return "Sleeping";
+		case SerialWrongStack:
+			return "Serial wrong stack";
+		case CheckSumNotMatch:
+			return "Checksum mismatch";
+		case FileIndexOut:
+			return "File index out of bounds";
+		case FileMismatch:
+			return "Cannot find file";
+		case Advertise:
+			return "In advertise mode";
+		default:
+			return "Unknown error";
+	}
+}
+
+void printDfPlayerDetail( uint8_t type, uint16_t value ) {
+	Serial.print( "[DFP] event=" );
+	Serial.print( dfPlayerTypeToText( type ) );
+	Serial.print( ", value=" );
+	Serial.print( value );
+
+	if ( type == DFPlayerError ) {
+		Serial.print( " (" );
+		Serial.print( dfPlayerErrorToText( value ) );
+		Serial.print( ")" );
+	}
+
+	Serial.println();
+}
 
 const char* wifiStatusToText( wl_status_t status ) {
 	switch ( status ) {
@@ -358,13 +425,21 @@ void addAuthHeaderIfNeeded( HTTPClient& http ) {
 	}
 }
 
-void playTrackIfReady( uint8_t track ) {
+bool playTrackIfReady( uint8_t track ) {
 	if ( !HAS_SD_CARD ) {
-		return;
+		Serial.println( "[PLAY] Skipped: HAS_SD_CARD is false." );
+		return false;
 	}
-	if ( dfReady ) {
-		player.play( track );
+
+	if ( !dfReady ) {
+		Serial.println( "[PLAY] Skipped: DFPlayer is not ready." );
+		return false;
 	}
+
+	Serial.print( "[PLAY] Sending DFPlayer play command for track " );
+	Serial.println( track );
+	player.play( track );
+	return true;
 }
 
 int pingPcFromEsp32( String& bodyOut ) {
@@ -394,6 +469,30 @@ int pingPcFromEsp32( String& bodyOut ) {
 
 void handleHealth() {
 	const String resp = "{\"ok\":true,\"device\":\"esp32\",\"service\":\"tapo-alarm\"}";
+	server.send( 200, "application/json", resp );
+}
+
+void handleDfStatus() {
+	if ( !dfReady ) {
+		server.send( 503, "application/json", "{\"ok\":false,\"df_ready\":false}" );
+		return;
+	}
+
+	Serial.println( "[DFP] Status check requested." );
+	const int volume = player.readVolume();
+	delay( 100 );
+	const int fileCount = player.readFileCounts( DFPLAYER_DEVICE_SD );
+	delay( 100 );
+	const int state = player.readState();
+
+	const String resp =
+		String( "{\"ok\":true" ) +
+		",\"df_ready\":true" +
+		",\"volume\":" + String( volume ) +
+		",\"sd_file_count\":" + String( fileCount ) +
+		",\"state\":" + String( state ) +
+		"}";
+
 	server.send( 200, "application/json", resp );
 }
 
@@ -432,12 +531,13 @@ void handlePlay() {
 		return;
 	}
 
-	playTrackIfReady( static_cast<uint8_t>( track ) );
-	server.send( 200, "application/json", "{\"ok\":true,\"action\":\"play_sent\"}" );
+	const bool sent = playTrackIfReady( static_cast<uint8_t>( track ) );
+	server.send( sent ? 200 : 503, "application/json", sent ? "{\"ok\":true,\"action\":\"play_sent\"}" : "{\"ok\":false,\"error\":\"dfplayer_not_ready_or_disabled\"}" );
 }
 
 void setupHttpServer() {
 	server.on( "/health", HTTP_GET, handleHealth );
+	server.on( "/api/df-status", HTTP_GET, handleDfStatus );
 	server.on( "/api/alert", HTTP_POST, handleAlert );
 	server.on( "/api/ping-pc", HTTP_GET, handlePingPc );
 	server.on( "/api/play", HTTP_GET, handlePlay );
@@ -448,7 +548,7 @@ void setupHttpServer() {
 
 	server.begin();
 	Serial.println( "HTTP server listening on port 80" );
-	Serial.println( "Routes: GET /health, POST /api/alert, GET /api/ping-pc, GET /api/play?track=1" );
+	Serial.println( "Routes: GET /health, GET /api/df-status, POST /api/alert, GET /api/ping-pc, GET /api/play?track=1" );
 }
 
 void setup() {
@@ -468,6 +568,7 @@ void setup() {
 		Serial.println( "DFPlayer OK" );
 		dfReady = true;
 		player.volume( 25 );
+		Serial.println( "DFPlayer volume set to 25" );
 		if ( HAS_SD_CARD ) {
 			playTrackIfReady( 1 );
 		} else {
@@ -481,6 +582,10 @@ void setup() {
 
 void loop() {
 	server.handleClient();
+
+	if ( dfReady && player.available() ) {
+		printDfPlayerDetail( player.readType(), player.read() );
+	}
 
 	if ( Serial.available() ) {
 		const char cmd = static_cast<char>( Serial.read() );

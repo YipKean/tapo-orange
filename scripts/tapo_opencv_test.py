@@ -14,6 +14,8 @@ import numpy as np
 import torch
 from ultralytics import YOLO
 
+from pet_detection import detect_collar_aware_pets, parse_class_ids
+
 
 def load_dotenv(dotenv_path: Path) -> None:
     if not dotenv_path.exists():
@@ -165,6 +167,25 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=15,
         help="COCO class id for cat. Default is 15.",
+    )
+    parser.add_argument(
+        "--cat-collar-fallback",
+        action="store_true",
+        help=(
+            "Allow collar-aware pet fallback detections when YOLO misses class cat. "
+            "Useful when a collar makes the cat look like another pet class."
+        ),
+    )
+    parser.add_argument(
+        "--cat-collar-fallback-class-ids",
+        default="16",
+        help="Comma-separated fallback COCO class ids to count as pet candidates. Default: 16 (dog).",
+    )
+    parser.add_argument(
+        "--cat-collar-fallback-confidence",
+        type=float,
+        default=0.12,
+        help="Minimum confidence for collar-aware fallback detections.",
     )
     parser.add_argument(
         "--cat-imgsz",
@@ -634,89 +655,22 @@ def detect_cats(
     confidence_threshold: float,
     cat_class_id: int,
     cat_imgsz: int,
+    collar_fallback_enabled: bool = False,
+    collar_fallback_class_ids: list[int] | None = None,
+    collar_fallback_confidence: float = 0.12,
 ) -> list[tuple[tuple[int, int, int, int], float]]:
-    if detector is None:
-        return []
-
-    if backend == "ultralytics":
-        results = detector.predict(
-            source=frame,
-            conf=confidence_threshold,
-            classes=[cat_class_id],
-            device=device,
-            verbose=False,
-            imgsz=cat_imgsz,
-        )
-        detections: list[tuple[tuple[int, int, int, int], float]] = []
-        if not results:
-            return detections
-        boxes = results[0].boxes
-        if boxes is None:
-            return detections
-        xyxy = boxes.xyxy.detach().cpu().numpy()
-        confs = boxes.conf.detach().cpu().numpy()
-        for box, score in zip(xyxy, confs):
-            x1, y1, x2, y2 = [int(v) for v in box]
-            detections.append(((x1, y1, x2, y2), float(score)))
-        return detections
-
-    detector = detector  # type: ignore[assignment]
-
-    input_size = 640
-    blob = cv2.dnn.blobFromImage(
+    return detect_collar_aware_pets(
+        detector,
+        backend,
+        device,
         frame,
-        scalefactor=1 / 255.0,
-        size=(input_size, input_size),
-        swapRB=True,
-        crop=False,
+        confidence_threshold,
+        cat_class_id,
+        cat_imgsz,
+        collar_fallback_enabled=collar_fallback_enabled,
+        collar_fallback_class_ids=collar_fallback_class_ids or [],
+        collar_fallback_confidence=collar_fallback_confidence,
     )
-    detector.setInput(blob)
-    outputs = detector.forward()
-    predictions = np.squeeze(outputs)
-    if predictions.ndim != 2:
-        return []
-    if predictions.shape[0] < predictions.shape[1]:
-        predictions = predictions.T
-    if predictions.shape[1] < 5 + cat_class_id:
-        return []
-
-    frame_height, frame_width = frame.shape[:2]
-    scale_x = frame_width / input_size
-    scale_y = frame_height / input_size
-
-    boxes: list[list[int]] = []
-    scores: list[float] = []
-
-    # YOLOv8 ONNX commonly outputs cx, cy, w, h, then per-class scores.
-    for row in predictions:
-        if row.shape[0] <= 4 + cat_class_id:
-            continue
-        class_scores = row[4:]
-        class_id = int(np.argmax(class_scores))
-        score = float(class_scores[class_id])
-        if class_id != cat_class_id or score < confidence_threshold:
-            continue
-
-        cx, cy, width, height = row[:4]
-        x1 = int((cx - width / 2) * scale_x)
-        y1 = int((cy - height / 2) * scale_y)
-        w = int(width * scale_x)
-        h = int(height * scale_y)
-        boxes.append([x1, y1, w, h])
-        scores.append(score)
-
-    if not boxes:
-        return []
-
-    indexes = cv2.dnn.NMSBoxes(boxes, scores, confidence_threshold, 0.45)
-    if len(indexes) == 0:
-        return []
-
-    detections: list[tuple[tuple[int, int, int, int], float]] = []
-    for idx in np.array(indexes).flatten():
-        x, y, w, h = boxes[int(idx)]
-        detections.append(((x, y, x + w, y + h), scores[int(idx)]))
-    return detections
 
 
 def preprocess_cat_frame(frame: np.ndarray, mode: str) -> np.ndarray:
@@ -1125,6 +1079,11 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--clip-seconds must be greater than 0.")
     if not 0 <= args.cat_confidence <= 1:
         raise ValueError("--cat-confidence must be between 0 and 1.")
+    if args.cat_class_id < 0:
+        raise ValueError("--cat-class-id must be 0 or greater.")
+    if not 0 <= args.cat_collar_fallback_confidence <= 1:
+        raise ValueError("--cat-collar-fallback-confidence must be between 0 and 1.")
+    parse_class_ids(args.cat_collar_fallback_class_ids)
     if args.cat_enter_frames <= 0:
         raise ValueError("--cat-enter-frames must be greater than 0.")
     if not 0 <= args.cat_zone_overlap <= 1:
@@ -1432,6 +1391,12 @@ def print_runtime_banner(
         f"{detector_runtime.device.upper()}. "
         + ("Headless mode active." if args.headless else "Press q to quit.")
     )
+    if args.cat_collar_fallback:
+        print(
+            "Collar-aware pet fallback enabled: class_ids="
+            f"{args.cat_collar_fallback_class_ids}, "
+            f"confidence={args.cat_collar_fallback_confidence:.2f}"
+        )
 
 
 def log_run_start(
@@ -1526,6 +1491,8 @@ def emit_alert(
     event_log_dir: Path,
     output_state: OutputRuntimeState,
     args: argparse.Namespace,
+    snapshot_dir: Path,
+    frame: np.ndarray,
     frame_width: int,
     frame_height: int,
     subject: str,
@@ -1545,6 +1512,22 @@ def emit_alert(
             f"[{format_timestamp(event_ts)}] {event_prefix}: "
             f"{subject.lower()} lasted {duration_s:.1f}s"
         )
+    if not current_motion_snapshot_name and not args.no_snapshots:
+        snapshot_name = (
+            datetime.fromtimestamp(event_ts).strftime(
+                f"{event_prefix.lower()}_%Y%m%d_%H%M%S"
+            )
+            + f"_{alert_cat.lower()}.jpg"
+        )
+        snapshot_path = snapshot_dir / snapshot_name
+        if cv2.imwrite(str(snapshot_path), frame):
+            current_motion_snapshot_name = snapshot_name
+            print(f"[{format_timestamp(event_ts)}] Alert snapshot saved: {snapshot_path}")
+        else:
+            print(
+                f"[{format_timestamp(event_ts)}] Failed to save alert snapshot: {snapshot_path}",
+                file=sys.stderr,
+            )
     if current_motion_snapshot_name:
         alert_message += f" snapshot={current_motion_snapshot_name}"
     print(alert_message)
@@ -1627,6 +1610,9 @@ def build_frame_observation(
         args.cat_confidence,
         args.cat_class_id,
         args.cat_imgsz,
+        args.cat_collar_fallback,
+        parse_class_ids(args.cat_collar_fallback_class_ids),
+        args.cat_collar_fallback_confidence,
     )
     zone_candidates: list[ZoneCandidate] = []
     for box, score in observation.cat_detections:
@@ -2161,6 +2147,7 @@ def main() -> int:
     video_skip_accumulator = runtime_state.capture.video_skip_accumulator
     rtsp_retrieve_failures = runtime_state.capture.rtsp_retrieve_failures
     identity_debug_writer = runtime_state.output.identity_debug_writer
+    collar_fallback_class_ids = parse_class_ids(args.cat_collar_fallback_class_ids)
 
     while True:
         now = time.perf_counter()
@@ -2332,6 +2319,9 @@ def main() -> int:
                         args.cat_confidence,
                         args.cat_class_id,
                         args.cat_imgsz,
+                        args.cat_collar_fallback,
+                        collar_fallback_class_ids,
+                        args.cat_collar_fallback_confidence,
                     )
                 except cv2.error as exc:
                     if detector_backend == "opencv_dnn" and detector_device == "cuda":
@@ -2351,6 +2341,9 @@ def main() -> int:
                             args.cat_confidence,
                             args.cat_class_id,
                             args.cat_imgsz,
+                            args.cat_collar_fallback,
+                            collar_fallback_class_ids,
+                            args.cat_collar_fallback_confidence,
                         )
                     else:
                         raise
@@ -2797,6 +2790,8 @@ def main() -> int:
                         config.event_log_dir,
                         runtime_state.output,
                         args,
+                        snapshot_dir,
+                        frame,
                         frame_width,
                         frame_height,
                         subject,
@@ -2815,6 +2810,8 @@ def main() -> int:
                     config.event_log_dir,
                     runtime_state.output,
                     args,
+                    snapshot_dir,
+                    frame,
                     frame_width,
                     frame_height,
                     subject,
@@ -2830,6 +2827,8 @@ def main() -> int:
                 config.event_log_dir,
                 runtime_state.output,
                 args,
+                snapshot_dir,
+                frame,
                 frame_width,
                 frame_height,
                 "Zone activity",

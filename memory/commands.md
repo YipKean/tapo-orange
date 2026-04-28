@@ -7,9 +7,17 @@
 # - Footage source: use --video <path> and usually --no-snapshots.
 # - --snapshot-cooldown 10 means max 1 snapshot every 10 seconds.
 # - --cat-zone-overlap helps block walk-by edge-touch triggers.
+# - Collar handling for the classifier wrapper happens in scripts\collar_filter.py.
+#   It suppresses unusual saturated green/blue collar colors inside the identity crop.
+# - --cat-collar-fallback is for cases where YOLO misses class cat entirely.
+#   The known Orange collar clip is detected mostly as COCO 20 (elephant) and sometimes 16 (dog), so use `--cat-collar-fallback-class-ids 16,20`.
 # - --zone-polygon uses normalized points: "x1,y1;x2,y2;x3,y3;x4,y4".
 # - Add --zone-edit to drag the zone with mouse, then press 'p' to print values.
 # - Discord bot is now separate from OpenCV. Run scripts\discord_alert_bot.py in parallel.
+# - Discord replay/screenshot testing:
+#   - `DISCORD_BOT_ENABLED=true` keeps the bot active.
+#   - `DISCORD_SEND_TEST_ALERTS=true` sends non-Goblin `ALERT:` lines too, useful for Orange video replay screenshot and mention tests.
+#   - Set `DISCORD_SEND_TEST_ALERTS=false` before normal live monitoring if you want Goblin-only Discord alerts.
 # - Use --headless for replay/tuning runs without opening an OpenCV window.
 # - Use --identity-debug-csv <path> to dump per-frame identity evidence for hard clips.
 # - Identity tuning knobs for bad-light Orange/Goblin flicker:
@@ -128,14 +136,14 @@ python scripts\replay_identity_classifier.py --video captures\clips\ALERT_GOBLIN
 # 22) Run the full bowl pipeline with the classifier wrapper on a trusted Goblin alert clip
 0.3651,0.5207;0.4317,0.5238;0.4328,0.6251;0.3644,0.6189
 0.3494,0.5213;0.4238,0.5269;0.4220,0.6201;0.3487,0.6115
+0.3619,0.4880;0.4307,0.4978;0.4283,0.5979;0.3595,0.5893
 
-.\.venv\Scripts\python.exe scripts\tapo_opencv_classifier_test.py --zone-polygon "0.3494,0.5213;0.4238,0.5269;0.4220,0.6201;0.3487,0.6115
-" --zone-edit --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --save-clip-on-alert --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 2080 --device cuda
+.\.venv\Scripts\python.exe scripts\tapo_opencv_classifier_test.py --zone-polygon 0.3619,0.4880;0.4307,0.4978;0.4283,0.5979;0.3595,0.5893" --zone-edit --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --save-clip-on-alert --cat-detect-mode always --cat-zone-overlap 0.25  --cat-imgsz 2080 --device cuda
 
+# cat collar
+.\.venv\Scripts\python.exe scripts\tapo_opencv_classifier_test.py --video "captures\clips\ALERT_2026-04-26_125944_ORANGE.mp4" --zone-polygon "0.3619,0.4880;0.4307,0.4978;0.4283,0.5979;0.3595,0.5893" --zone-edit --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 3 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 2080 --device cuda --cat-collar-fallback --cat-collar-fallback-class-ids 16,20 --cat-collar-fallback-confidence 0.25
 
-.\.venv\Scripts\python.exe scripts\tapo_opencv_classifier_test.py --video "captures\clips\POSSIBLE_GOBLIN_2026-04-21_173449_POSSIBLE_GOBLIN.mp4" --zone-polygon "0.3651,0.5207;0.4317,0.5238;0.4328,0.6251;0.3644,0.6189" --zone-edit --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 2080 --device cuda
-
-python scripts/tapo_opencv_test.py --video captures\clips\2026-04-17-orange-miss-compilation.mp4 --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --possible-goblin-seconds 2.0 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda --identity-debug-csv tmp\replay_tune.csv --id-goblin-support-conf 0.78 --id-goblin-support-margin 0.24 --id-goblin-torso-white-min 0.13 --id-goblin-periphery-margin-max 0.01 --id-lock-margin 0.13 --id-switch-margin 0.28
+python scripts/tapo_opencv_test.py --video captures\clips\ALERT_2026-04-27_201829_ORANGE.mp4 --motion-threshold 1.4 --process-fps 5 --snapshot-cooldown 0 --no-snapshots --alert-seconds 4 --cat-model models\yolov8m.pt --cat-confidence 0.08 --cat-enter-frames 1 --cat-hold-seconds 1.5 --cat-detect-mode always --cat-zone-overlap 0.25 --cat-imgsz 1920 --device cuda --identity-debug-csv tmp\replay_tune.csv --id-goblin-support-conf 0.78 --id-goblin-support-margin 0.24 --id-goblin-torso-white-min 0.13 --id-goblin-periphery-margin-max 0.01 --id-lock-margin 0.13 --id-switch-margin 0.28
 
 1_orange coordinate
 --zone-polygon "0.31,0.40;0.46,0.40;0.46,0.65;0.31,0.63"

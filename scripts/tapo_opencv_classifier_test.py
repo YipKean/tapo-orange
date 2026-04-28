@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import torch
 
+from collar_filter import suppress_collar_artifacts
 import tapo_opencv_test as base
 from train_identity_classifier import (
 	CLASS_NAMES,
@@ -112,12 +113,13 @@ def classifyCatIdentity(
 	crop = cropIdentityRoi( frame, box )
 	if crop is None:
 		return "unknown", 0.0, emptyEvidence()
+	filteredCrop, _collarMaskRatio = suppress_collar_artifacts( crop )
 
 	classifierRuntime.ensureLoaded()
 	assert classifierRuntime.model is not None
 
 	with torch.no_grad():
-		inputTensor = preprocessCrop( crop, classifierRuntime.imageSize ).unsqueeze( 0 )
+		inputTensor = preprocessCrop( filteredCrop, classifierRuntime.imageSize ).unsqueeze( 0 )
 		inputTensor = inputTensor.to( classifierRuntime.device )
 		logits = classifierRuntime.model( inputTensor )
 		probs = torch.softmax( logits, dim=1 ).squeeze( 0 ).detach().cpu().numpy()
@@ -125,8 +127,12 @@ def classifyCatIdentity(
 	orangeProb = float( probs[0] )
 	goblinProb = float( probs[1] )
 	predIndex = int( np.argmax( probs ) )
-	predLabel = classifierRuntime.classNames[predIndex]
-	predConf = float( probs[predIndex] )
+	if orangeProb >= goblinProb:
+		predLabel = "orange"
+		predConf = orangeProb
+	else:
+		predLabel = "goblin"
+		predConf = goblinProb
 
 	evidence = replace(
 		emptyEvidence(),
