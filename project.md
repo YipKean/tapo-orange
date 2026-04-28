@@ -272,9 +272,11 @@ OpenCV alert log â†’ scripts/discord_alert_bot.py â†’ Discord webhook
 Current Discord bot notes:
 
 * Watches the event log and sends webhook notifications for Goblin-related events and RTSP lifecycle events.
+* Sends watchdog lifecycle notifications when `scripts/watchdog_tapo.ps1` writes `WATCHDOG_START` / `WATCHDOG_END` into the daily event log.
 * When an alert log line includes `snapshot=...`, attaches the referenced image from `captures/` to the Discord webhook message.
 * Mentions can target one or more Discord users through `DISCORD_USER_ID` or comma-separated `DISCORD_USER_IDS`.
 * Temporary disable switch: set `DISCORD_BOT_ENABLED=false` in `.env`; set it back to `true` before live monitoring if Discord alerts are needed.
+* Optional Orange alert switch: set `DISCORD_SEND_ORANGE_ALERTS=true` to send Orange bowl alerts to Discord with mentions and snapshots while keeping broader replay/test alert mode off.
 * Temporary replay/screenshot test switch: set `DISCORD_SEND_TEST_ALERTS=true` to send all `ALERT:` lines, including Orange alerts from local video replay, with configured user mentions. Set it back to `false` for normal Goblin-only Discord alerts.
 * Sends startup/shutdown notifications for RTSP runs as `RTSP_STARTED` / `RTSP_ENDED`.
 * Sends a Discord bot self-startup webhook when the bot process launches: `DISCORD_BOT_STARTED: Discord alert bot is watching event logs.`
@@ -373,6 +375,16 @@ Focus on:
 * Tooltip/help text for the builder now lives in `scripts/i18n/tooltips.json` so UI help can be updated without editing Python code.
 * Current UX note:
   * builder supports per-option enable/disable ticks and lightweight custom `Ctrl+Z` / `Ctrl+Y` entry history because this Tk build does not support native `Entry(..., undo=True)` history.
+
+### Live Monitoring Launcher
+
+* `start_live_monitoring.bat` launches `scripts/start_live_monitoring.ps1`.
+* Startup order is intentional:
+  * start or confirm the Discord bot first
+  * then start the classifier command from `.env`
+  * then start the watchdog as a backup
+* Reason: the Discord bot tails the event log, so it should already be running before the RTSP process writes startup or alert lines.
+* The watchdog writes `WATCHDOG_START` and `WATCHDOG_END` lifecycle lines into `event-log/YYYY-MM-DD.log`; the Discord bot pings these as `WATCHDOG_STARTED` / `WATCHDOG_ENDED`.
 
 ### Current Watchdog Command Shape
 

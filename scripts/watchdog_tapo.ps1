@@ -8,12 +8,14 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptDir
 $StateDir = Join-Path $RepoRoot "captures"
+$EventLogDir = Join-Path $RepoRoot "event-log"
 $LogFile = Join-Path $StateDir "tapo_watchdog.log"
 $CommandLogFile = Join-Path $StateDir "tapo_watchdog_child.log"
 $IdleScript = Join-Path $ScriptDir "windows_idle_seconds.ps1"
 $DotenvPath = Join-Path $RepoRoot ".env"
 
 New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
+New-Item -ItemType Directory -Force -Path $EventLogDir | Out-Null
 
 function Get-DotenvValue {
     param(
@@ -58,6 +60,14 @@ function Write-Log {
     param([string]$Message)
     $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Add-Content -Path $LogFile -Value "[$ts] $Message"
+}
+
+function Write-EventLog {
+    param([string]$Message)
+    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $day = Get-Date -Format "yyyy-MM-dd"
+    $eventLogFile = Join-Path $EventLogDir "$day.log"
+    Add-Content -Path $eventLogFile -Value "[$ts] $Message"
 }
 
 function Get-WindowsIdleSeconds {
@@ -138,16 +148,28 @@ function Start-Tapo {
     }
 }
 
-Write-Log "watchdog (powershell) started"
+$watchdogEndReason = "normal_exit"
 
-while ($true) {
-    $idleSeconds = Get-WindowsIdleSeconds
-    $running = Test-TapoRunning
+try {
+    Write-Log "watchdog (powershell) started"
+    Write-EventLog "WATCHDOG_START: PowerShell watchdog started idle_threshold_seconds=$IdleThresholdSeconds check_interval_seconds=$CheckIntervalSeconds"
 
-    if (-not $running -and $idleSeconds -ge $IdleThresholdSeconds) {
-        Write-Log "windows idle ${idleSeconds}s and script not running -> start"
-        Start-Tapo
+    while ($true) {
+        $idleSeconds = Get-WindowsIdleSeconds
+        $running = Test-TapoRunning
+
+        if (-not $running -and $idleSeconds -ge $IdleThresholdSeconds) {
+            Write-Log "windows idle ${idleSeconds}s and script not running -> start"
+            Start-Tapo
+        }
+
+        Start-Sleep -Seconds $CheckIntervalSeconds
     }
-
-    Start-Sleep -Seconds $CheckIntervalSeconds
+} catch {
+    $watchdogEndReason = "error"
+    Write-Log "watchdog (powershell) stopped with error: $($_.Exception.Message)"
+    throw
+} finally {
+    Write-EventLog "WATCHDOG_END: PowerShell watchdog stopped reason=$watchdogEndReason"
+    Write-Log "watchdog (powershell) stopped reason=$watchdogEndReason"
 }

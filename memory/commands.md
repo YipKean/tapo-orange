@@ -15,8 +15,11 @@
 # - Add --zone-edit to drag the zone with mouse, then press 'p' to print values.
 # - Discord bot is now separate from OpenCV. Run scripts\discord_alert_bot.py in parallel.
 # - On Windows, closing the Discord bot cmd window should send `DISCORD_BOT_ENDED`; `Ctrl+C` remains the cleanest shutdown path.
+# - Watchdog start/stop is written to `event-log/YYYY-MM-DD.log` as `WATCHDOG_START` / `WATCHDOG_END` and sent to Discord as `WATCHDOG_STARTED` / `WATCHDOG_ENDED`.
+# - Set `DISCORD_SEND_ORANGE_ALERTS=true` to send Orange bowl alerts too, with mentions and snapshots, without enabling all replay/test alerts.
 # - Discord replay/screenshot testing:
 #   - `DISCORD_BOT_ENABLED=true` keeps the bot active.
+#   - `DISCORD_SEND_ORANGE_ALERTS=true` sends Orange `ALERT:` lines during normal monitoring.
 #   - `DISCORD_SEND_TEST_ALERTS=true` sends non-Goblin `ALERT:` lines too, useful for Orange video replay screenshot and mention tests.
 #   - Set `DISCORD_SEND_TEST_ALERTS=false` before normal live monitoring if you want Goblin-only Discord alerts.
 # - Use --headless for replay/tuning runs without opening an OpenCV window.
@@ -35,7 +38,8 @@
 # - Quick watchdog test: set idle threshold to 0 and check interval to 10s.
 # - One-click live launcher: double-click `start_live_monitoring.bat`.
 #   It opens separate cmd windows for the classifier command from `.env`, the Discord bot, and the watchdog.
-#   The classifier window starts first so the watchdog can act as a backup instead of immediately starting a duplicate pipeline.
+#   The Discord bot starts first so it is already watching event logs before any RTSP lifecycle or alert lines are written.
+#   The classifier window starts before the watchdog so the watchdog can act as a backup instead of immediately starting a duplicate pipeline.
 #   Before opening each window, it checks for an existing matching process and skips that service if it is already running.
 #   Service windows close on clean exit, but pause on command failure so errors remain visible.
 

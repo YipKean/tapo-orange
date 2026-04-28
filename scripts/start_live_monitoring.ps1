@@ -210,6 +210,16 @@ Write-Host "Starting Tapo watchdog..."
 '@
 
 Write-Host "Launching live monitoring windows from: $RepoRoot"
+
+$discordStarted = Start-CmdWindowIfNotRunning `
+    -Title "Tapo Discord Bot" `
+    -PowerShellBody $discordBody `
+    -ProcessPattern 'scripts[\\/]+discord_alert_bot\.py'
+
+if ($discordStarted) {
+    Start-Sleep -Seconds 2
+}
+
 $classifierStarted = Start-CmdWindowIfNotRunning `
     -Title "Tapo Classifier" `
     -PowerShellBody $classifierBody `
@@ -218,11 +228,6 @@ $classifierStarted = Start-CmdWindowIfNotRunning `
 if ($classifierStarted) {
     Start-Sleep -Seconds 2
 }
-
-Start-CmdWindowIfNotRunning `
-    -Title "Tapo Discord Bot" `
-    -PowerShellBody $discordBody `
-    -ProcessPattern 'scripts[\\/]+discord_alert_bot\.py' | Out-Null
 
 Start-Sleep -Seconds 1
 

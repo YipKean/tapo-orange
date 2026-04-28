@@ -198,6 +198,10 @@ def is_goblin_alert_line(line: str) -> bool:
 	)
 
 
+def is_orange_alert_line(line: str) -> bool:
+	return "alert: orange cat in zone lasted" in line.lower()
+
+
 def is_standard_alert_line(line: str) -> bool:
 	return "alert:" in line.lower()
 
@@ -210,11 +214,22 @@ def is_app_start_line(line: str) -> bool:
 	return "app_start:" in line.lower()
 
 
-def is_discord_event_line(line: str, include_test_alerts: bool = False) -> bool:
+def is_watchdog_lifecycle_line(line: str) -> bool:
+	text = line.lower()
+	return "watchdog_start:" in text or "watchdog_end:" in text
+
+
+def is_discord_event_line(
+	line: str,
+	include_test_alerts: bool = False,
+	include_orange_alerts: bool = False,
+) -> bool:
 	return (
 		is_goblin_alert_line(line)
 		or is_app_start_line(line)
 		or is_app_end_line(line)
+		or is_watchdog_lifecycle_line(line)
+		or (include_orange_alerts and is_orange_alert_line(line))
 		or (include_test_alerts and is_standard_alert_line(line))
 	)
 
@@ -280,6 +295,15 @@ def build_discord_message(alert_line: str, user_ids: list[str]) -> str:
 		if mention:
 			return f"{base} {mention}"
 		return base
+	if "ALERT: orange cat in zone lasted" in base:
+		base = base.replace(
+			"] ALERT: orange cat in zone lasted",
+			"] ALERT_ORANGE: orange cat in zone lasted",
+			1,
+		)
+		if mention:
+			return f"{base} {mention}"
+		return base
 	if "APP_END:" in base:
 		base = base.replace("] APP_END:", "] RTSP_ENDED:", 1)
 		base = f"{base} Please monitor manually."
@@ -288,6 +312,17 @@ def build_discord_message(alert_line: str, user_ids: list[str]) -> str:
 		return base
 	if "APP_START:" in base:
 		base = base.replace("] APP_START:", "] RTSP_STARTED:", 1)
+		if mention:
+			return f"{base} {mention}"
+		return base
+	if "WATCHDOG_END:" in base:
+		base = base.replace("] WATCHDOG_END:", "] WATCHDOG_ENDED:", 1)
+		base = f"{base} Please monitor manually."
+		if mention:
+			return f"{base} {mention}"
+		return base
+	if "WATCHDOG_START:" in base:
+		base = base.replace("] WATCHDOG_START:", "] WATCHDOG_STARTED:", 1)
 		if mention:
 			return f"{base} {mention}"
 		return base
@@ -406,6 +441,10 @@ def main() -> int:
 		os.environ.get("DISCORD_SEND_TEST_ALERTS", ""),
 		default=False,
 	)
+	include_orange_alerts = env_flag_enabled(
+		os.environ.get("DISCORD_SEND_ORANGE_ALERTS", ""),
+		default=False,
+	)
 
 	event_log_dir = (repo_root / args.event_log_dir).resolve()
 	event_log_dir.mkdir(parents=True, exist_ok=True)
@@ -475,7 +514,11 @@ def main() -> int:
 
 			for raw_line in new_lines:
 				line = raw_line.strip()
-				if not line or not is_discord_event_line(line, include_test_alerts):
+				if not line or not is_discord_event_line(
+					line,
+					include_test_alerts=include_test_alerts,
+					include_orange_alerts=include_orange_alerts,
+				):
 					continue
 				if (is_app_start_line(line) or is_app_end_line(line)) and not is_rtsp_lifecycle_line(line):
 					continue
@@ -490,6 +533,9 @@ def main() -> int:
 						"alert: white-black cat in zone lasted" in line_lower
 						or "app_start:" in line_lower
 						or "app_end:" in line_lower
+						or "watchdog_start:" in line_lower
+						or "watchdog_end:" in line_lower
+						or (include_orange_alerts and is_orange_alert_line(line))
 						or (include_test_alerts and is_standard_alert_line(line))
 					)
 					else []
@@ -498,6 +544,7 @@ def main() -> int:
 				attachment_path = (
 					resolve_snapshot_path(snapshot_dir, line)
 					if is_goblin_alert_line(line)
+					or (include_orange_alerts and is_orange_alert_line(line))
 					or (include_test_alerts and is_standard_alert_line(line))
 					else None
 				)
