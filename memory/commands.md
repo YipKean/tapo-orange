@@ -14,6 +14,7 @@
 # - --zone-polygon uses normalized points: "x1,y1;x2,y2;x3,y3;x4,y4".
 # - Add --zone-edit to drag the zone with mouse, then press 'p' to print values.
 # - Discord bot is now separate from OpenCV. Run scripts\discord_alert_bot.py in parallel.
+# - On Windows, closing the Discord bot cmd window should send `DISCORD_BOT_ENDED`; `Ctrl+C` remains the cleanest shutdown path.
 # - Discord replay/screenshot testing:
 #   - `DISCORD_BOT_ENABLED=true` keeps the bot active.
 #   - `DISCORD_SEND_TEST_ALERTS=true` sends non-Goblin `ALERT:` lines too, useful for Orange video replay screenshot and mention tests.
@@ -32,6 +33,11 @@
 # - Set DISCORD_WEBHOOK_URL and optional DISCORD_USER_ID in .env for the bot.
 # - Watchdog can launch a custom command from .env via WATCHDOG_TAPO_COMMAND.
 # - Quick watchdog test: set idle threshold to 0 and check interval to 10s.
+# - One-click live launcher: double-click `start_live_monitoring.bat`.
+#   It opens separate cmd windows for the classifier command from `.env`, the Discord bot, and the watchdog.
+#   The classifier window starts first so the watchdog can act as a backup instead of immediately starting a duplicate pipeline.
+#   Before opening each window, it checks for an existing matching process and skips that service if it is already running.
+#   Service windows close on clean exit, but pause on command failure so errors remain visible.
 
 # Watchdog quick test (auto re-open in ~10 seconds after process exits)
 powershell -ExecutionPolicy Bypass -File scripts\watchdog_tapo.ps1 -IdleThresholdSeconds 0 -CheckIntervalSeconds 10

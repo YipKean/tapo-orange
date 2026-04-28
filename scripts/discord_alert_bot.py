@@ -1,15 +1,24 @@
 import argparse
+import ctypes
 import json
 import mimetypes
 import os
 import re
 import sys
+import threading
 import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
 from urllib import error as urllib_error
 from urllib import request as urllib_request
+
+CTRL_CLOSE_EVENT = 2
+CTRL_LOGOFF_EVENT = 5
+CTRL_SHUTDOWN_EVENT = 6
+
+shutdown_ping_lock = threading.Lock()
+shutdown_ping_sent = False
 
 
 def load_dotenv(dotenv_path: Path) -> None:
@@ -302,6 +311,66 @@ def send_bot_shutdown_message(
 	)
 
 
+def send_bot_shutdown_ping_once(
+	event_log_dir: Path,
+	webhook_url: str,
+	timeout_s: float,
+	user_agent: str,
+	reason: str,
+) -> None:
+	global shutdown_ping_sent
+
+	with shutdown_ping_lock:
+		if shutdown_ping_sent or not webhook_url:
+			return
+		shutdown_ping_sent = True
+
+	ok, details = send_bot_shutdown_message(
+		webhook_url=webhook_url,
+		timeout_s=timeout_s,
+		user_agent=user_agent,
+	)
+	status_line = (
+		f"[{format_timestamp(time.time())}] DISCORD_BOT_SHUTDOWN_PING "
+		f"{'OK' if ok else 'FAILED'} reason={reason} {details}"
+	)
+	print(status_line, flush=True)
+	append_event_log(event_log_dir, status_line)
+
+
+def register_windows_console_shutdown_handler(
+	event_log_dir: Path,
+	webhook_url: str,
+	timeout_s: float,
+	user_agent: str,
+) -> object | None:
+	if os.name != "nt":
+		return None
+
+	def handler(ctrl_type: int) -> bool:
+		if ctrl_type not in {CTRL_CLOSE_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT}:
+			return False
+		reason_by_type = {
+			CTRL_CLOSE_EVENT: "console_close",
+			CTRL_LOGOFF_EVENT: "windows_logoff",
+			CTRL_SHUTDOWN_EVENT: "windows_shutdown",
+		}
+		send_bot_shutdown_ping_once(
+			event_log_dir=event_log_dir,
+			webhook_url=webhook_url,
+			timeout_s=timeout_s,
+			user_agent=user_agent,
+			reason=reason_by_type[ctrl_type],
+		)
+		return True
+
+	handler_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint)
+	handler_ref = handler_type(handler)
+	if not ctypes.windll.kernel32.SetConsoleCtrlHandler(handler_ref, True):
+		raise ctypes.WinError()
+	return handler_ref
+
+
 def send_bot_startup_message(
 	webhook_url: str,
 	timeout_s: float,
@@ -361,7 +430,12 @@ def main() -> int:
 	file_pos = 0
 	sent_signatures: deque[str] = deque(maxlen=200)
 	shutdown_reason = "normal_exit"
-	shutdown_ping_sent = False
+	console_shutdown_handler = register_windows_console_shutdown_handler(
+		event_log_dir=event_log_dir,
+		webhook_url=webhook_url,
+		timeout_s=args.discord_timeout,
+		user_agent=args.discord_user_agent,
+	)
 	ok, details = send_bot_startup_message(
 		webhook_url=webhook_url,
 		timeout_s=args.discord_timeout,
@@ -448,19 +522,14 @@ def main() -> int:
 		print(f"[{format_timestamp(time.time())}] Discord bot stopped.")
 		return 0
 	finally:
-		if not shutdown_ping_sent and webhook_url:
-			ok, details = send_bot_shutdown_message(
-				webhook_url=webhook_url,
-				timeout_s=args.discord_timeout,
-				user_agent=args.discord_user_agent,
-			)
-			shutdown_ping_sent = True
-			status_line = (
-				f"[{format_timestamp(time.time())}] DISCORD_BOT_SHUTDOWN_PING "
-				f"{'OK' if ok else 'FAILED'} reason={shutdown_reason} {details}"
-			)
-			print(status_line)
-			append_event_log(event_log_dir, status_line)
+		_ = console_shutdown_handler
+		send_bot_shutdown_ping_once(
+			event_log_dir=event_log_dir,
+			webhook_url=webhook_url,
+			timeout_s=args.discord_timeout,
+			user_agent=args.discord_user_agent,
+			reason=shutdown_reason,
+		)
 
 
 if __name__ == "__main__":

@@ -279,6 +279,7 @@ Current Discord bot notes:
 * Sends startup/shutdown notifications for RTSP runs as `RTSP_STARTED` / `RTSP_ENDED`.
 * Sends a Discord bot self-startup webhook when the bot process launches: `DISCORD_BOT_STARTED: Discord alert bot is watching event logs.`
 * Sends a final webhook message when the Discord bot itself shuts down cleanly (for example normal exit or `Ctrl+C`): `DISCORD_BOT_ENDED: Discord alert bot turning off.`
+* On Windows, the Discord bot also registers a console-close handler so closing its cmd window attempts to send the same final `DISCORD_BOT_ENDED` webhook before the process exits.
 
 Current ESP32 API baseline (`tapo-alarm`):
 
